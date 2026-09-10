@@ -13,5 +13,11 @@ class Settings(BaseSettings):
     paypal_client_secret: str | None = None
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
+    # Email (AWS SES)
+    email_backend: str = "console"  # "ses" or "console"
+    email_from: str | None = None
+    ses_region: str = "us-east-1"
+    frontend_url: str = "http://localhost:5173"
+
 
 settings = Settings()

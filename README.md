@@ -145,6 +145,10 @@ npx playwright test
 | `PAYPAL_CLIENT_ID` | PayPal Payouts API client ID |
 | `PAYPAL_CLIENT_SECRET` | PayPal Payouts API secret |
 | `SQS_QUEUE_URL` | Amazon SQS queue URL for background jobs |
+| `EMAIL_BACKEND` | `console` (logs) or `ses` (AWS SES) |
+| `EMAIL_FROM` | Sender address (must be verified in SES) |
+| `SES_REGION` | AWS SES region (default `us-east-1`) |
+| `FRONTEND_URL` | Base URL used in email links (e.g. `http://localhost:5173`) |
 
 ### Frontend (`frontend/.env`)
 

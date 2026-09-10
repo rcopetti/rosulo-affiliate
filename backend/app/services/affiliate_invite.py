@@ -9,6 +9,7 @@ from app.db.models import AffiliateAccount, AffiliateInvite, Tenant
 from app.schemas.affiliate_account import AffiliateAccountCreate
 from app.schemas.affiliate_invite import AffiliateInviteAccept, AffiliateInviteCreate
 from app.services import affiliate_account as acct_service
+from app.services import email as email_service
 
 
 async def create_invite(
@@ -28,6 +29,7 @@ async def create_invite(
     db.add(invite)
     await db.commit()
     await db.refresh(invite)
+    await email_service.send_invite_email(invite, tenant.name)
     return invite
 
 
