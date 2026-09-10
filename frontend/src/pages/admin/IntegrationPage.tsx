@@ -75,7 +75,8 @@ export function IntegrationPage() {
   const trackingSnippet = `<script>
   (function() {
     const params = new URLSearchParams(location.search);
-    const code = params.get('rc') || 'YOUR_TRACKING_CODE';
+    const code = params.get('rc');
+    if (!code) return;
     const page = location.href;
     const ref = document.referrer || '';
     fetch('${apiBase}/tracking/track-click', {
@@ -105,8 +106,8 @@ Context:
 
 Please provide:
 1. A JavaScript snippet to include in the <head> of every landing page that:
-   - Reads the ?rc query parameter.
-   - Calls the tracking endpoint with { tracking_code, referer, page_url }.
+   - Returns immediately if the ?rc query parameter is missing, to avoid unnecessary API calls.
+   - If ?rc is present, calls the tracking endpoint with { tracking_code, referer, page_url }.
    - Stores the returned click_id in localStorage as "rosulo_click_id" for later attribution.
 2. A brief explanation of how the CORS allowlist protects the endpoint.
 3. A note that the snippet should not expose the API key to the browser.`;
@@ -244,7 +245,7 @@ Please provide:
                 content: (
                   <div className="space-y-4">
                     <p className="text-sm text-slate-600">
-                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It records a click using the public <code>tracking_code</code> from the URL. The API key is not exposed in the browser.
+                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and records a click using that public <code>tracking_code</code>. The API key is not exposed in the browser.
                     </p>
                     <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
                       <code>{trackingSnippet}</code>
