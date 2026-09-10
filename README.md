@@ -36,7 +36,7 @@ This repository contains both the FastAPI backend and the React frontend in a si
 
 ## Prerequisites
 
-- Python 3.12+
+- `uv` (Python package manager and runtime)
 - Node.js 20+ and npm
 - Docker and Docker Compose (for the local PostgreSQL container)
 - PayPal Payouts API sandbox or live credentials (for payout execution)
@@ -56,11 +56,13 @@ This starts a Postgres container on port `15432` with the credentials used in `b
 
 ### 2. Set up the backend
 
+`uv` manages the Python version and the virtual environment. The project targets Python 3.12.
+
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv python install 3.12
+uv venv --python 3.12
+uv pip install -e ".[dev]"
 cp .env.example .env
 ```
 
@@ -69,13 +71,13 @@ Edit `.env` if you need to change the database URL, PayPal credentials, or JWT s
 Apply the Alembic migrations:
 
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 Run the backend:
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 The API will be available at `http://localhost:8001`. The OpenAPI docs are at `http://localhost:8001/docs`.
@@ -106,8 +108,7 @@ The application will be available at `http://localhost:5173`.
 
 ```bash
 cd backend
-source .venv/bin/activate
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 ### Frontend
