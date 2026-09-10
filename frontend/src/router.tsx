@@ -6,6 +6,7 @@ import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { AdminRegisterPage } from '@/pages/admin/RegisterPage';
+import { IntegrationPage } from '@/pages/admin/IntegrationPage';
 import { MerchantSelectPage } from '@/pages/affiliate/MerchantSelectPage';
 import { DashboardPage } from '@/pages/affiliate/DashboardPage';
 import { CampaignsPage } from '@/pages/affiliate/CampaignsPage';
@@ -85,6 +86,7 @@ export const router = createBrowserRouter([
               { path: 'affiliates/:id/contract', element: <ContractEditPage /> },
               { path: 'payouts', element: <AdminPayoutsPage /> },
               { path: 'events', element: <EventsPage /> },
+              { path: 'integration', element: <IntegrationPage /> },
             ],
           },
         ],

@@ -4,6 +4,7 @@ from app.api.v1.admin import affiliates as admin_affiliates
 from app.api.v1.admin import contracts as admin_contracts
 from app.api.v1.admin import dashboard as admin_dashboard
 from app.api.v1.admin import events as admin_events
+from app.api.v1.admin import integrations as admin_integrations
 from app.api.v1.admin import payouts as admin_payouts
 from app.api.v1.affiliate import balance as affiliate_balance
 from app.api.v1.affiliate import campaigns as affiliate_campaigns
@@ -24,6 +25,7 @@ router.include_router(admin_contracts.router, prefix="/admin/affiliates", tags=[
 router.include_router(admin_affiliates.router, prefix="/admin/affiliates", tags=["admin-affiliates"])
 router.include_router(admin_payouts.router, prefix="/admin/payouts", tags=["admin-payouts"])
 router.include_router(admin_events.router, prefix="/admin/events", tags=["admin-events"])
+router.include_router(admin_integrations.router, prefix="/admin/integration", tags=["admin-integration"])
 router.include_router(admin_dashboard.router, prefix="/admin/dashboard", tags=["admin-dashboard"])
 router.include_router(affiliate_merchants.router, prefix="/affiliate/merchants", tags=["affiliate-merchants"])
 router.include_router(affiliate_profile.router, prefix="/affiliate", tags=["affiliate-profile"])

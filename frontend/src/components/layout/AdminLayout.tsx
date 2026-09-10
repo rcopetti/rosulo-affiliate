@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, CreditCard, Activity, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Activity, Key, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
@@ -7,6 +7,7 @@ const nav = [
   { to: '/admin/affiliates', label: 'Affiliates', icon: Users },
   { to: '/admin/payouts', label: 'Payouts', icon: CreditCard },
   { to: '/admin/events', label: 'Events', icon: Activity },
+  { to: '/admin/integration', label: 'Integration', icon: Key },
 ];
 
 export function AdminLayout() {
