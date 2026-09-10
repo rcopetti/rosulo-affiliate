@@ -33,13 +33,11 @@ async def create_invite(
     return invite
 
 
-async def accept_invite(
-    db: AsyncSession, data: AffiliateInviteAccept
-) -> tuple[AffiliateAccount, Tenant]:
+async def _get_valid_invite(db: AsyncSession, token: str, email: str) -> AffiliateInvite:
     result = await db.execute(
         select(AffiliateInvite).where(
-            AffiliateInvite.token == data.token,
-            AffiliateInvite.email == data.email,
+            AffiliateInvite.token == token,
+            AffiliateInvite.email == email,
             AffiliateInvite.status == "pending",
         )
     )
@@ -50,6 +48,13 @@ async def accept_invite(
         datetime.timezone.utc
     ):
         raise HTTPException(status_code=400, detail="Invite expired")
+    return invite
+
+
+async def accept_invite(
+    db: AsyncSession, data: AffiliateInviteAccept
+) -> tuple[AffiliateAccount, Tenant]:
+    invite = await _get_valid_invite(db, data.token, data.email)
 
     tenant_result = await db.execute(
         select(Tenant).where(Tenant.id == invite.tenant_id)
@@ -73,6 +78,7 @@ async def accept_invite(
             tax_status=data.tax_status or account.tax_status,
             tax_form_type=data.tax_form_type or account.tax_form_type,
             paypal_email=data.paypal_email or account.paypal_email,
+            backup_withholding_required=account.backup_withholding_required,
         )
     else:
         if not data.password or not data.name or not data.country:
@@ -105,3 +111,58 @@ async def accept_invite(
     await db.commit()
 
     return account, tenant
+
+
+async def accept_invite_token(
+    db: AsyncSession, account: AffiliateAccount, token: str
+) -> None:
+    invite = await _get_valid_invite(db, token, account.email)
+
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == invite.tenant_id)
+    )
+    tenant = tenant_result.scalar_one()
+
+    acct_data = AffiliateAccountCreate(
+        email=account.email,
+        password="changeme",
+        name=account.name,
+        country=account.country,
+        state=account.state,
+        tax_id=account.tax_id,
+        tax_status=account.tax_status,
+        tax_form_type=account.tax_form_type,
+        paypal_email=account.paypal_email,
+        backup_withholding_required=account.backup_withholding_required,
+    )
+
+    await acct_service.create_tenant_affiliate(
+        db, tenant, acct_data, contract_terms=invite.contract_terms
+    )
+
+    invite.status = "accepted"
+    await db.commit()
+
+
+async def pending_invites(db: AsyncSession, account: AffiliateAccount) -> list[dict]:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    result = await db.execute(
+        select(AffiliateInvite, Tenant)
+        .join(Tenant, AffiliateInvite.tenant_id == Tenant.id)
+        .where(
+            AffiliateInvite.email == account.email,
+            AffiliateInvite.status == "pending",
+            (AffiliateInvite.expires_at == None)
+            | (AffiliateInvite.expires_at > now),
+        )
+    )
+    return [
+        {
+            "id": str(i.id),
+            "tenant_id": str(t.id),
+            "tenant_name": t.name,
+            "token": i.token,
+            "expires_at": i.expires_at.isoformat() if i.expires_at else None,
+        }
+        for i, t in result.all()
+    ]

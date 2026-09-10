@@ -1,13 +1,12 @@
 import { api } from './client';
-import { AffiliateAccount, Tenant } from './types';
+import { AffiliateAccount, PendingInvite, Tenant } from './types';
 
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
-export interface AcceptInviteRequest {
-  token: string;
+export interface RegisterRequest {
   email: string;
   password: string;
   name: string;
@@ -18,6 +17,10 @@ export interface AcceptInviteRequest {
   paypal_email?: string;
 }
 
+export interface AcceptInviteRequest {
+  token: string;
+}
+
 export interface AuthResponse {
   token: string;
   account: AffiliateAccount;
@@ -26,6 +29,16 @@ export interface AuthResponse {
 
 export async function loginAffiliate(data: LoginRequest): Promise<AuthResponse> {
   const res = await api.post<AuthResponse>('/auth/affiliate/login', data);
+  return res.data;
+}
+
+export async function registerAffiliate(data: RegisterRequest): Promise<AuthResponse> {
+  const res = await api.post<AuthResponse>('/auth/affiliate/register', data);
+  return res.data;
+}
+
+export async function listInvites(): Promise<PendingInvite[]> {
+  const res = await api.get<PendingInvite[]>('/auth/affiliate/invites');
   return res.data;
 }
 

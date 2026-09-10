@@ -9,8 +9,7 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-export const acceptInviteSchema = z.object({
-  token: z.string().min(1, 'Invite token is required'),
+export const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   name: z.string().min(1, 'Name is required'),
@@ -21,5 +20,9 @@ export const acceptInviteSchema = z.object({
   paypal_email: z.string().email().optional().or(z.literal('')),
 });
 
+export const acceptInviteSchema = z.object({
+  token: z.string().min(1, 'Invite token is required'),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
-export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;

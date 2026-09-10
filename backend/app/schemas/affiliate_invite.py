@@ -24,7 +24,7 @@ class AffiliateInviteOut(BaseModel):
 
 class AffiliateInviteAccept(BaseModel):
     token: str
-    email: EmailStr
+    email: EmailStr | None = None
     password: str | None = None
     name: str | None = None
     country: str | None = None
@@ -32,3 +32,11 @@ class AffiliateInviteAccept(BaseModel):
     tax_status: str = "us_person"
     tax_form_type: str | None = None
     paypal_email: str | None = None
+
+
+class PendingInviteOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    tenant_name: str
+    token: str
+    expires_at: datetime.datetime | None = None

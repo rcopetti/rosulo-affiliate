@@ -30,6 +30,7 @@ async def test_admin_create_invite(client: AsyncClient, tenant_user):
 async def test_admin_create_invite_sends_email(
     client: AsyncClient, tenant_user, monkeypatch
 ):
+    monkeypatch.setattr(settings, "email_backend", "console")
     monkeypatch.setattr(settings, "email_from", "test@rosulo.dev")
     monkeypatch.setattr(settings, "frontend_url", "http://localhost:5173")
     send_mock = MagicMock()

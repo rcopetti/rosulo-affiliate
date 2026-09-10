@@ -124,6 +124,14 @@ export interface Dashboard {
   balance: Balance;
 }
 
+export interface PendingInvite {
+  id: string;
+  tenant_id: string;
+  tenant_name: string;
+  token: string;
+  expires_at: string | null;
+}
+
 export interface AdminDashboard {
   campaign_performance: { campaign_id: string; name: string; clicks: number; leads: number; sales: number }[];
   affiliates: Affiliate[];
