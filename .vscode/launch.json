@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: uvicorn",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/backend",
+      "args": [
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8001",
+        "--reload"
+      ],
+      "envFile": "${workspaceFolder}/backend/.env",
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Frontend: vite",
+      "type": "chrome",
+      "request": "launch",
+      "preLaunchTask": "Start Frontend",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Backend + Frontend",
+      "configurations": ["Backend: uvicorn", "Frontend: vite"]
+    }
+  ]
+}
