@@ -101,13 +101,17 @@ TenantUser
 ├── name
 └── role: admin | manager
 
-AffiliateInvite (created by a tenant)
+AffiliateInvite (created by a tenant for an affiliate email)
 ├── tenant_id
 ├── email
 ├── token
 ├── contract_terms
 ├── status: pending | accepted | expired
 └── expires_at
+
+An invite has two outcomes depending on whether the email already has an `AffiliateAccount`:
+- **Registration invite:** creates a new `AffiliateAccount` and a per-tenant `Affiliate` on acceptance.
+- **Association invite:** creates only a per-tenant `Affiliate` linked to the existing `AffiliateAccount` on acceptance.
 
 AffiliateAccount (created when an affiliate accepts an invitation)
 ├── email
@@ -451,7 +455,9 @@ All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped aut
 
 - `POST /v1/auth/tenant/login` — tenant user login with email/password, returns a tenant-scoped JWT.
 - `POST /v1/auth/affiliate/login` — affiliate login, returns JWT.
-- `POST /v1/auth/affiliate/accept-invite` — affiliate creates or links a global account by accepting a tenant invitation.
+- `POST /v1/auth/affiliate/accept-invite` — affiliate accepts an invite token.
+  - If the email has no `AffiliateAccount`, the payload must include `email`, `password`, `name`, `country`, and `token`; the account is created and linked to the tenant.
+  - If the email already has an `AffiliateAccount`, the payload must include `email` and `token`; a new per-tenant `Affiliate` is created and linked.
 
 ### Affiliate — Tenant Selection
 
@@ -467,18 +473,11 @@ All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped aut
 
 ### Admin — Affiliates
 
-- `POST /v1/admin/affiliates` — create an `AffiliateInvite` with contract terms; returns the invite token/link for the affiliate.
-- `GET /v1/admin/affiliates` — list affiliates and pending invites for a tenant.
-- `GET /v1/admin/affiliates/:id` — get affiliate profile.
-- `PATCH /v1/admin/affiliates/:id` — update affiliate.
-- `POST /v1/admin/affiliates/:id/documents/approve` — approve a business form.
-- `POST /v1/admin/affiliates/:id/approve` — approve KYC for payouts.
-- `POST /v1/admin/affiliates/:id/reject` — reject an affiliate or KYC.
-
-### Admin — Affiliates
-
-- `POST /v1/admin/affiliates` — create a global affiliate account and a per-tenant record with contract terms.
-- `GET /v1/admin/affiliates` — list affiliates for a tenant.
+- `POST /v1/admin/affiliates` — create an `AffiliateInvite` for an email with contract terms.
+  - If no `AffiliateAccount` exists for the email: the invite is a registration invite; on acceptance the account is created and linked to the tenant.
+  - If an `AffiliateAccount` already exists for the email: the invite is an association invite; on acceptance a new `Affiliate` record links the existing account to the tenant.
+  - The platform sends an email with a tokenized invite link; the actual email dispatch may be a logging stub in v1.
+- `GET /v1/admin/affiliates` — list accepted affiliates and pending invites for a tenant.
 - `GET /v1/admin/affiliates/:id` — get affiliate profile.
 - `PATCH /v1/admin/affiliates/:id` — update affiliate.
 - `POST /v1/admin/affiliates/:id/documents/approve` — approve a business form.
@@ -598,7 +597,7 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 ## 18. Acceptance Criteria (v1)
 
 1. A tenant user can log in with email/password and manage their tenant account, including API keys.
-2. A tenant can create an affiliate invite with contract terms; an affiliate can only create an account by accepting an invite.
+2. A tenant can create an affiliate invite for an email with contract terms; accepting the invite creates a new affiliate account when needed, or links an existing account, and creates the per-tenant affiliate record.
 3. An affiliate can create one or more campaigns.
 4. The service can ingest `click`, `lead`, and `sale` events and attribute them to a campaign.
 5. Every `click` event records the `referer` and `page_url`.
