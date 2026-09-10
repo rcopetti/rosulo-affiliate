@@ -22,7 +22,7 @@ async def get_contract(
     affiliate = await affiliate_service.get_affiliate(db, uuid.UUID(affiliate_id), tenant)
     if not affiliate:
         raise HTTPException(status_code=404, detail="Affiliate not found")
-    contract = await contract_service.get_contract_for_affiliate(db, affiliate.id)
+    contract = await contract_service.get_contract_for_affiliate(db, affiliate["id"])
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     return contract
@@ -38,7 +38,7 @@ async def update_contract(
     affiliate = await affiliate_service.get_affiliate(db, uuid.UUID(affiliate_id), tenant)
     if not affiliate:
         raise HTTPException(status_code=404, detail="Affiliate not found")
-    contract = await contract_service.get_contract_for_affiliate(db, affiliate.id)
+    contract = await contract_service.get_contract_for_affiliate(db, affiliate["id"])
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     for key, value in update.model_dump(exclude_unset=True).items():
@@ -58,7 +58,7 @@ async def add_term(
     affiliate = await affiliate_service.get_affiliate(db, uuid.UUID(affiliate_id), tenant)
     if not affiliate:
         raise HTTPException(status_code=404, detail="Affiliate not found")
-    contract = await contract_service.get_contract_for_affiliate(db, affiliate.id)
+    contract = await contract_service.get_contract_for_affiliate(db, affiliate["id"])
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     return await contract_service.add_term(db, contract.id, data.model_dump())
@@ -72,4 +72,7 @@ async def update_term(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    affiliate = await affiliate_service.get_affiliate(db, uuid.UUID(affiliate_id), tenant)
+    if not affiliate:
+        raise HTTPException(status_code=404, detail="Affiliate not found")
     return await contract_service.update_term(db, uuid.UUID(term_id), data.model_dump())

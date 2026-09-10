@@ -14,8 +14,8 @@ export interface AffiliateAccount {
   tax_status?: 'us_person' | 'non_us_person';
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E';
   paypal_email?: string;
-  backup_withholding_required: boolean;
-  documents: Document[];
+  backup_withholding_required?: boolean;
+  documents?: Document[];
 }
 
 export interface Document {

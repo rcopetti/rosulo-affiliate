@@ -18,7 +18,7 @@ export function RequestPayoutPage() {
   const { data: balance, isLoading } = useQuery({ queryKey: ['affiliate-balance'], queryFn: getBalance });
   const { data: profile } = useQuery({ queryKey: ['affiliate-account'], queryFn: getProfile });
 
-  const kycApproved = profile?.documents.every((d) => d.status === 'approved') ?? false;
+  const kycApproved = profile?.documents?.every((d) => d.status === 'approved') ?? false;
 
   const mutation = useMutation({
     mutationFn: () => requestPayout(balance?.available || 0),

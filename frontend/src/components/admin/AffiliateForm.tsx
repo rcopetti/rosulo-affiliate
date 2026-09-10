@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/Input';
 
 const schema = z.object({
   email: z.string().email(),
-  name: z.string().min(1),
 });
 
 export type AffiliateFormData = z.infer<typeof schema>;
@@ -25,10 +24,9 @@ export function AffiliateForm({ onSubmit, isLoading }: AffiliateFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <Input label="Full name" {...register('name')} error={errors.name?.message} />
       <Input label="Email" type="email" {...register('email')} error={errors.email?.message} />
       <Button type="submit" isLoading={isLoading}>
-        Create affiliate
+        Send invite
       </Button>
     </form>
   );

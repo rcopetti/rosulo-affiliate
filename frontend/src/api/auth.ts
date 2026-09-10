@@ -6,11 +6,16 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
+export interface AcceptInviteRequest {
+  token: string;
   email: string;
   password: string;
   name: string;
   country: string;
+  state?: string;
+  tax_status?: string;
+  tax_form_type?: string;
+  paypal_email?: string;
 }
 
 export interface AuthResponse {
@@ -24,8 +29,8 @@ export async function loginAffiliate(data: LoginRequest): Promise<AuthResponse> 
   return res.data;
 }
 
-export async function registerAffiliate(data: RegisterRequest): Promise<AuthResponse> {
-  const res = await api.post<AuthResponse>('/auth/affiliate/register', data);
+export async function acceptInvite(data: AcceptInviteRequest): Promise<AuthResponse> {
+  const res = await api.post<AuthResponse>('/auth/affiliate/accept-invite', data);
   return res.data;
 }
 

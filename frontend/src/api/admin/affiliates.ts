@@ -1,10 +1,21 @@
 import { adminApi } from './client';
-import { Affiliate, AffiliateAccount } from '../types';
+import { Affiliate } from '../types';
 
-export interface CreateAffiliateRequest {
+export interface CreateInviteRequest {
   email: string;
-  name: string;
-  contract: { terms: { payment_sequence: string; commission_percent: number }[] };
+  name?: string;
+  contract_terms?: { payment_sequence: number; commission_percent: number; minimum_threshold?: number }[];
+}
+
+export interface InviteOut {
+  id: string;
+  tenant_id: string;
+  email: string;
+  token: string;
+  contract_terms: { payment_sequence?: number; commission_percent: number }[];
+  status: string;
+  expires_at: string;
+  created_at: string;
 }
 
 export async function getAffiliates(): Promise<Affiliate[]> {
@@ -12,13 +23,19 @@ export async function getAffiliates(): Promise<Affiliate[]> {
   return res.data;
 }
 
-export async function getAffiliate(id: string): Promise<Affiliate & { account: AffiliateAccount }> {
-  const res = await adminApi.get<Affiliate & { account: AffiliateAccount }>(`/admin/affiliates/${id}`);
+export async function getAffiliate(id: string): Promise<Affiliate & { account: { email: string; name: string } }> {
+  const res = await adminApi.get<Affiliate & { account: { email: string; name: string } }>(`/admin/affiliates/${id}`);
   return res.data;
 }
 
-export async function createAffiliate(data: CreateAffiliateRequest): Promise<Affiliate> {
-  const res = await adminApi.post<Affiliate>('/admin/affiliates', data);
+export async function createAffiliate(data: CreateInviteRequest): Promise<InviteOut> {
+  const payload = {
+    email: data.email,
+    contract_terms: data.contract_terms || [
+      { payment_sequence: 1, commission_percent: 10 },
+    ],
+  };
+  const res = await adminApi.post<InviteOut>('/admin/affiliates', payload);
   return res.data;
 }
 

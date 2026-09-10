@@ -9,15 +9,15 @@ import { useToast } from '@/components/ui/Toast';
 export function AdminLoginPage() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [apiKey, setApiKey] = useState('');
-  const [tenantId, setTenantId] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await loginAdmin({ api_key: apiKey, tenant_id: tenantId });
+      await loginAdmin({ email, password });
       navigate('/admin/dashboard');
     } catch {
       toast.add({ title: 'Login failed', description: 'Invalid credentials', variant: 'error' });
@@ -33,12 +33,18 @@ export function AdminLoginPage() {
           <CardTitle>Admin Login</CardTitle>
         </CardHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input label="Tenant ID" value={tenantId} onChange={(e) => setTenantId(e.target.value)} required />
           <Input
-            label="API key"
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <Input
+            label="Password"
             type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             required
           />
           <Button type="submit" isLoading={loading} className="w-full">

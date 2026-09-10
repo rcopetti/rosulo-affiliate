@@ -21,4 +21,6 @@ class AffiliateOut(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     account_id: uuid.UUID = Field(validation_alias="affiliate_account_id")
+    email: str
+    name: str
     kyc_approved_for_payout: bool
