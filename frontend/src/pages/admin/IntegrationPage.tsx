@@ -117,7 +117,7 @@ Please provide:
        path=/; Secure; SameSite=Lax; Max-Age=2592000 (30 days); domain=.<your-apex-domain>
    - For the domain, compute the apex from the current hostname or hardcode it to the site apex (e.g. .allbum.me).
 2. A short note that this endpoint does not require the API key and is protected by an Origin allowlist.
-3. A note that the lead and sale backend handlers will read the "rosulo_click_id" cookie later.`;
+3. A note that the registration handler will read the "rosulo_click_id" cookie and send a lead event, and that the lead event response contains an "id" field that should be stored with the user account. Later sale events use that stored lead_id.`;
 
   const saleCurl = `curl -X POST ${apiBase}/events \\
   -H "X-API-Key: ${apiKey || '<your-api-key>'}" \\
@@ -126,7 +126,7 @@ Please provide:
   -d '{
     "event_id": "sale-001",
     "type": "sale",
-    "campaign_id": "<campaign-id>",
+    "lead_id": "<lead_id-stored-with-user>",
     "customer_id": "cust-001",
     "amount": 100.00,
     "currency": "USD",
@@ -170,19 +170,20 @@ When a user registers or signs up:
         - Otherwise keep the first 2 and last 1 character of the local part and replace the middle with "***".
         - Example: john.doe@example.com -> jo***e@example.com; ab@example.com -> ****@example.com.
 - The backend will resolve the click_id to the correct campaign and affiliate.
+- The response contains an "id" field. Store that value as the lead_id with the user account (database column or metadata). Sale events will use this lead_id.
 
 ## 3. Sale tracking (payment)
 When a payment is confirmed:
-- Read the "rosulo_click_id" cookie from the request.
-- If the cookie is present, POST to ${apiBase}/events with:
+- Use the lead_id that was stored with the user account during registration.
+- POST to ${apiBase}/events with:
     - event_id: a unique idempotent id for this sale
     - type: "sale"
-    - click_id: value from the cookie
-    - customer_id: the user's internal id
+    - lead_id: the stored lead_id
+    - customer_id: the user's internal id (optional, will be inherited from the lead if omitted)
     - amount: the payment amount (number)
     - currency: 3-letter code such as "USD"
     - payment_sequence: integer 1 for the first payment, 2 for the second, 3 for the third, etc.
-- If the cookie is missing, try to use the customer_id to associate the sale with a known lead/click; if not possible, do not send the event.
+- The backend will resolve the lead_id to the correct campaign and affiliate.
 - Call the endpoint only after the payment is confirmed and successful.
 
 ## Constraints
@@ -349,7 +350,7 @@ Please output a complete, copy-paste-ready implementation: the frontend snippet,
                     <div className="space-y-2">
                       <h3 className="font-semibold text-slate-900">Lead tracking</h3>
                       <p className="text-sm text-slate-600">
-                        When a user registers, read the <code>rosulo_click_id</code> cookie. If it exists, send a <code>lead</code> event.
+                        When a user registers, read the <code>rosulo_click_id</code> cookie. If it exists, send a <code>lead</code> event. Store the returned <code>id</code> from the API response as <code>lead_id</code> with the user account; it will be used for sale attribution.
                       </p>
                       <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
                         <code>{`curl -X POST ${apiBase}/events \\
@@ -372,7 +373,7 @@ Please output a complete, copy-paste-ready implementation: the frontend snippet,
                     <div className="space-y-2">
                       <h3 className="font-semibold text-slate-900">Sale tracking</h3>
                       <p className="text-sm text-slate-600">
-                        When a payment is confirmed, send a <code>sale</code> event. Use <code>payment_sequence</code> 1 for the first payment, 2 for the second, and so on.
+                        When a payment is confirmed, send a <code>sale</code> event using the stored <code>lead_id</code>. Use <code>payment_sequence</code> 1 for the first payment, 2 for the second, and so on.
                       </p>
                       <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
                         <code>{saleCurl}</code>

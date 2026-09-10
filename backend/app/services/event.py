@@ -17,9 +17,22 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
 
     affiliate_id = None
     campaign_id = None
+    customer_id = data.customer_id
 
-    # Resolve attribution from a previous click if provided.
-    if data.click_id:
+    # Resolve attribution from the strongest available source.
+    if data.lead_id:
+        try:
+            lead = await db.get(Event, uuid.UUID(data.lead_id))
+        except ValueError:
+            lead = None
+        if not lead or lead.type != "lead" or lead.tenant_id != tenant.id:
+            raise HTTPException(status_code=400, detail="Invalid or unknown lead_id")
+        campaign_id = lead.campaign_id
+        affiliate_id = lead.affiliate_id
+        if not customer_id:
+            customer_id = lead.customer_id
+
+    elif data.click_id:
         try:
             click = await db.get(Event, uuid.UUID(data.click_id))
         except ValueError:
@@ -29,7 +42,7 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         campaign_id = click.campaign_id
         affiliate_id = click.affiliate_id
 
-    if data.campaign_id:
+    elif data.campaign_id:
         campaign_result = await db.execute(
             select(Campaign).where(
                 Campaign.id == uuid.UUID(data.campaign_id),
@@ -42,8 +55,13 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         affiliate_id = campaign.affiliate_id
         campaign_id = campaign.id
 
-    if data.type in ("click", "lead") and not campaign_id:
-        raise HTTPException(status_code=400, detail="click/lead require campaign_id or click_id")
+    # Type-specific validation.
+    if data.type == "click" and not campaign_id:
+        raise HTTPException(status_code=400, detail="click requires campaign_id")
+    if data.type == "lead" and not campaign_id:
+        raise HTTPException(status_code=400, detail="lead requires click_id or campaign_id")
+    if data.type == "sale" and not campaign_id:
+        raise HTTPException(status_code=400, detail="sale requires lead_id, click_id, or campaign_id")
 
     event = Event(
         event_id=data.event_id,
@@ -51,7 +69,7 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         tenant_id=tenant.id,
         campaign_id=campaign_id,
         affiliate_id=affiliate_id,
-        customer_id=data.customer_id,
+        customer_id=customer_id,
         customer_email=data.customer_email,
         amount=data.amount,
         currency=data.currency,
