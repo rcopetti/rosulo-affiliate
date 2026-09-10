@@ -13,6 +13,7 @@ export const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   name: z.string().min(1, 'Name is required'),
+  country: z.string().min(1, 'Country is required'),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

@@ -1,5 +1,8 @@
 from pydantic import BaseModel, EmailStr
 
+from app.schemas.affiliate_account import AffiliateAccountOut
+from app.schemas.tenant import TenantOut
+
 
 class AffiliateRegister(BaseModel):
     email: EmailStr
@@ -20,3 +23,9 @@ class AffiliateLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class AuthResponse(BaseModel):
+    token: str
+    account: AffiliateAccountOut
+    tenants: list[TenantOut]

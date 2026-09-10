@@ -18,7 +18,7 @@ async def test_sale_generates_commission(client: AsyncClient, tenant: Tenant):
             "tax_status": "us_person",
         },
     )
-    token = reg.json()["access_token"]
+    token = reg.json()["token"]
 
     admin = await client.post(
         "/v1/admin/affiliates/register",

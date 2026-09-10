@@ -19,7 +19,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant):
             "paypal_email": "payout@example.com",
         },
     )
-    token = reg.json()["access_token"]
+    token = reg.json()["token"]
 
     admin = await client.post(
         "/v1/admin/affiliates/register",

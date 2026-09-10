@@ -15,11 +15,11 @@ async def test_register_and_login(client: AsyncClient):
         },
     )
     assert reg.status_code == 200
-    token = reg.json()["access_token"]
+    token = reg.json()["token"]
 
     login = await client.post(
         "/v1/auth/affiliate/login",
         json={"email": "aff@example.com", "password": "secret123"},
     )
     assert login.status_code == 200
-    assert "access_token" in login.json()
+    assert "token" in login.json()

@@ -17,7 +17,7 @@ async def test_affiliate_create_campaign(client: AsyncClient, tenant: Tenant):
             "tax_status": "us_person",
         },
     )
-    token = reg.json()["access_token"]
+    token = reg.json()["token"]
 
     # create per-tenant affiliate
     admin = await client.post(

@@ -17,7 +17,7 @@ async def test_event_ingestion(client: AsyncClient, tenant: Tenant):
             "tax_status": "us_person",
         },
     )
-    token = reg.json()["access_token"]
+    token = reg.json()["token"]
 
     await client.post(
         "/v1/admin/affiliates/register",

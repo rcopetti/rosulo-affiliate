@@ -39,6 +39,7 @@ export function RegisterPage() {
           <Input label="Full name" {...register('name')} error={errors.name?.message} />
           <Input label="Email" type="email" {...register('email')} error={errors.email?.message} />
           <Input label="Password" type="password" {...register('password')} error={errors.password?.message} />
+          <Input label="Country" {...register('country')} error={errors.country?.message} />
           <Button type="submit" isLoading={mutation.isPending} className="w-full">
             Create account
           </Button>
