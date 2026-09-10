@@ -5,6 +5,7 @@ import { rotateApiKey, getIntegrationTenant, updateAllowedDomains } from '@/api/
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 
 export function IntegrationPage() {
@@ -28,6 +29,8 @@ export function IntegrationPage() {
   const apiBase = import.meta.env.VITE_API_BASE_URL?.startsWith('http')
     ? import.meta.env.VITE_API_BASE_URL
     : `${window.location.origin}${import.meta.env.VITE_API_BASE_URL || '/api/v1'}`;
+
+  const tenantId = localStorage.getItem('rosulo:adminTenantId') || '';
 
   const rotate = useMutation({
     mutationFn: rotateApiKey,
@@ -84,9 +87,60 @@ export function IntegrationPage() {
         referer: ref,
         page_url: page,
       }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.click_id) localStorage.setItem('rosulo_click_id', data.click_id);
     });
   })();
 </script>`;
+
+  const clickAiPrompt = `I need to integrate public affiliate click tracking into a static website.
+
+Context:
+- The site domain is one of: ${domains.join(', ') || '[add allowed domains above]'}
+- The affiliate landing links have this format: https://<domain>/?rc=<TRACKING_CODE>
+- The public tracking endpoint is: POST ${apiBase}/tracking/track-click
+- This endpoint does NOT require the secret API key. It only requires a valid Origin header from an allowed domain.
+
+Please provide:
+1. A JavaScript snippet to include in the <head> of every landing page that:
+   - Reads the ?rc query parameter.
+   - Calls the tracking endpoint with { tracking_code, referer, page_url }.
+   - Stores the returned click_id in localStorage as "rosulo_click_id" for later attribution.
+2. A brief explanation of how the CORS allowlist protects the endpoint.
+3. A note that the snippet should not expose the API key to the browser.`;
+
+  const saleCurl = `curl -X POST ${apiBase}/events \\
+  -H "X-API-Key: ${apiKey || '<your-api-key>'}" \\
+  -H "X-Tenant-Id: ${tenantId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "event_id": "sale-001",
+    "type": "sale",
+    "campaign_id": "<campaign-id>",
+    "customer_id": "cust-001",
+    "amount": 100.00,
+    "currency": "USD",
+    "payment_sequence": 1
+  }'`;
+
+  const saleAiPrompt = `I need to send server-to-server sale events to the Rosulo Affiliate API.
+
+Context:
+- API base URL: ${apiBase}
+- Tenant ID: ${tenantId}
+- Auth header: X-API-Key: ${apiKey || '<your-api-key>'}
+- Optional tenant header: X-Tenant-Id: ${tenantId}
+- Endpoint: POST /events
+- For sale events, include: event_id (unique idempotent id), type: "sale", campaign_id, customer_id, amount, currency, payment_sequence.
+
+Please provide:
+1. A backend function in the project's language that sends a sale event.
+2. The API key must come from an environment variable, never the frontend.
+3. Add idempotency: reuse the same event_id for retries and handle 5xx errors with a small backoff.
+4. Call the endpoint only after a successful payment is confirmed.
+5. Do not allow the frontend to call this endpoint directly.`;
 
   if (isLoading) return <div className="p-4 text-slate-600">Loading integration settings…</div>;
 
@@ -180,17 +234,44 @@ export function IntegrationPage() {
             Direct tracking snippet
           </CardTitle>
         </CardHeader>
-        <div className="space-y-4 px-6 pb-6">
-          <p className="text-sm text-slate-600">
-            Paste this in the <code>&lt;head&gt;</code> of your landing pages. It records a click using the public <code>tracking_code</code> from the URL. The API key is not exposed in the browser.
-          </p>
-          <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
-            <code>{trackingSnippet}</code>
-          </pre>
-          <p className="text-sm text-slate-600">
-            Affiliate links should point to your domain with the campaign code, e.g.
-            <code className="ml-1 rounded bg-slate-100 px-1 py-0.5">https://allbum.me/?rc=ABC123</code>.
-          </p>
+        <div className="px-6 pb-6">
+          <Tabs
+            defaultTab="manual"
+            tabs={[
+              {
+                id: 'manual',
+                label: 'Manual',
+                content: (
+                  <div className="space-y-4">
+                    <p className="text-sm text-slate-600">
+                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It records a click using the public <code>tracking_code</code> from the URL. The API key is not exposed in the browser.
+                    </p>
+                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
+                      <code>{trackingSnippet}</code>
+                    </pre>
+                    <p className="text-sm text-slate-600">
+                      Affiliate links should point to your domain with the campaign code, e.g.
+                      <code className="ml-1 rounded bg-slate-100 px-1 py-0.5">https://allbum.me/?rc=ABC123</code>.
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                id: 'ai',
+                label: 'AI Prompt',
+                content: (
+                  <div className="space-y-4">
+                    <p className="text-sm text-slate-600">
+                      Paste this prompt into an AI assistant to generate a customized tracking snippet for your project.
+                    </p>
+                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
+                      <code>{clickAiPrompt}</code>
+                    </pre>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </div>
       </Card>
 
@@ -198,34 +279,51 @@ export function IntegrationPage() {
         <CardHeader>
           <CardTitle>Server-to-server event API</CardTitle>
         </CardHeader>
-        <div className="space-y-4 px-6 pb-6">
-          <div className="text-sm text-slate-600">
-            <p><strong>Base URL:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">{apiBase}</code></p>
-            <p className="mt-1"><strong>Auth header:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">X-API-Key: {apiKey || '&lt;your-api-key&gt;'}</code></p>
-          </div>
+        <div className="px-6 pb-6">
+          <Tabs
+            defaultTab="manual"
+            tabs={[
+              {
+                id: 'manual',
+                label: 'Manual',
+                content: (
+                  <div className="space-y-4">
+                    <div className="text-sm text-slate-600">
+                      <p><strong>Base URL:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">{apiBase}</code></p>
+                      <p className="mt-1"><strong>Auth header:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">X-API-Key: {apiKey || '&lt;your-api-key&gt;'}</code></p>
+                      <p className="mt-1"><strong>Tenant header:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">X-Tenant-Id: {tenantId || 'N/A'}</code></p>
+                    </div>
 
-          <h3 className="font-semibold text-slate-900">Tracking a sale</h3>
-          <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
-            <code>{`curl -X POST ${apiBase}/events \\
-  -H "X-API-Key: ${apiKey || '<your-api-key>'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "event_id": "sale-001",
-    "type": "sale",
-    "campaign_id": "<campaign-id>",
-    "customer_id": "cust-001",
-    "amount": 100.00,
-    "currency": "USD",
-    "payment_sequence": 1
-  }'`}</code>
-          </pre>
+                    <h3 className="font-semibold text-slate-900">Tracking a sale</h3>
+                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
+                      <code>{saleCurl}</code>
+                    </pre>
 
-          <h3 className="font-semibold text-slate-900">Supported event types</h3>
-          <ul className="list-disc pl-5 text-sm text-slate-600">
-            <li><code>click</code> — public tracking endpoint, requires allowed domain.</li>
-            <li><code>lead</code> — server-to-server with API key.</li>
-            <li><code>sale</code> — server-to-server with API key, include <code>amount</code>, <code>currency</code>, and <code>payment_sequence</code>.</li>
-          </ul>
+                    <h3 className="font-semibold text-slate-900">Supported event types</h3>
+                    <ul className="list-disc pl-5 text-sm text-slate-600">
+                      <li><code>click</code> — public tracking endpoint, requires allowed domain.</li>
+                      <li><code>lead</code> — server-to-server with API key.</li>
+                      <li><code>sale</code> — server-to-server with API key, include <code>amount</code>, <code>currency</code>, and <code>payment_sequence</code>.</li>
+                    </ul>
+                  </div>
+                ),
+              },
+              {
+                id: 'ai',
+                label: 'AI Prompt',
+                content: (
+                  <div className="space-y-4">
+                    <p className="text-sm text-slate-600">
+                      Paste this prompt into an AI assistant to generate a backend integration for sending sale events.
+                    </p>
+                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
+                      <code>{saleAiPrompt}</code>
+                    </pre>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </div>
       </Card>
     </div>
