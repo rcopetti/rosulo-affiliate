@@ -7,8 +7,24 @@ from app.api.v1.dependencies import get_tenant
 from app.core.security import hash_api_key
 from app.db.dependencies import get_db
 from app.db.models import Tenant
+from app.schemas.tenant import TenantOut, TenantUpdate
+from app.services import tenant as tenant_service
 
 router = APIRouter()
+
+
+@router.get("", response_model=TenantOut)
+async def get_integration_tenant(tenant: Tenant = Depends(get_tenant)):
+    return tenant
+
+
+@router.put("/allowed-domains", response_model=TenantOut)
+async def update_allowed_domains(
+    data: TenantUpdate,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    return await tenant_service.update_tenant(db, tenant, data)
 
 
 @router.post("/api-key")

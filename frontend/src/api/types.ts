@@ -2,6 +2,7 @@ export interface Tenant {
   id: string;
   name: string;
   logo_url?: string;
+  allowed_domains?: string[];
 }
 
 export interface AffiliateAccount {
