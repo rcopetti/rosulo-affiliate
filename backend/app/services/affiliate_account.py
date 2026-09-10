@@ -31,12 +31,12 @@ async def register_account(db: AsyncSession, data: AffiliateRegister) -> Affilia
     return account
 
 
-async def authenticate_account(db: AsyncSession, data: AffiliateLogin) -> str:
+async def authenticate_account(db: AsyncSession, data: AffiliateLogin) -> AffiliateAccount:
     result = await db.execute(select(AffiliateAccount).where(AffiliateAccount.email == data.email))
     account = result.scalar_one_or_none()
     if not account or not verify_password(data.password, account.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return create_access_token(account.id)
+    return account
 
 
 async def update_account(

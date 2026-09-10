@@ -1,16 +1,28 @@
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Affiliate, Tenant
+from app.db.models import Tenant
 
 
 @pytest.mark.asyncio
-async def test_admin_get_contract(client: AsyncClient, tenant: Tenant):
-    reg = await client.post(
-        "/v1/admin/affiliates/register",
-        headers={"X-API-Key": "test-api-key"},
+async def test_admin_get_contract(client: AsyncClient, tenant: Tenant, tenant_user):
+    admin_login = await client.post(
+        "/v1/auth/tenant/login",
+        json={"email": "admin@allbum.me", "password": "admin123"},
+    )
+    admin_token = admin_login.json()["token"]
+
+    invite = await client.post(
+        "/v1/admin/affiliates",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"email": "contract@example.com"},
+    )
+    invite_token = invite.json()["token"]
+
+    accept = await client.post(
+        "/v1/auth/affiliate/accept-invite",
         json={
+            "token": invite_token,
             "email": "contract@example.com",
             "password": "secret123",
             "name": "Contract Test",
@@ -18,10 +30,17 @@ async def test_admin_get_contract(client: AsyncClient, tenant: Tenant):
             "tax_status": "us_person",
         },
     )
-    affiliate_id = reg.json()["id"]
+
+    affiliates = await client.get(
+        "/v1/admin/affiliates",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    account_id = accept.json()["account"]["id"]
+    affiliate_id = next(a["id"] for a in affiliates.json() if a["account_id"] == account_id)
+
     r = await client.get(
         f"/v1/admin/affiliates/{affiliate_id}/contract",
-        headers={"X-API-Key": "test-api-key"},
+        headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert r.status_code == 200
     assert r.json()["active"] is True

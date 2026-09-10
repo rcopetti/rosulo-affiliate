@@ -25,6 +25,23 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class TenantLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class AffiliateAcceptInvite(BaseModel):
+    token: str
+    email: EmailStr
+    password: str | None = None
+    name: str | None = None
+    country: str | None = None
+    state: str | None = None
+    tax_status: str = "us_person"
+    tax_form_type: str | None = None
+    paypal_email: str | None = None
+
+
 class AuthResponse(BaseModel):
     token: str
     account: AffiliateAccountOut

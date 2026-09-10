@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -30,6 +31,39 @@ class Tenant(Base):
     api_key_hash = Column(String, nullable=False, unique=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    users = relationship("TenantUser", back_populates="tenant")
+    invites = relationship("AffiliateInvite", back_populates="tenant")
+
+
+class TenantUser(Base):
+    __tablename__ = "tenant_users"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    email = Column(String, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    role = Column(String, nullable=False, default="admin")
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    tenant = relationship("Tenant", back_populates="users")
+
+
+class AffiliateInvite(Base):
+    __tablename__ = "affiliate_invites"
+    __table_args__ = (UniqueConstraint("tenant_id", "token"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    email = Column(String, nullable=False, index=True)
+    token = Column(String, nullable=False, unique=True, index=True)
+    contract_terms = Column(JSON, default=list)
+    status = Column(String, nullable=False, default="pending")
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    tenant = relationship("Tenant", back_populates="invites")
 
 
 class AffiliateAccount(Base):

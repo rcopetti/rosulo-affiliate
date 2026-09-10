@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 from httpx import AsyncClient
@@ -7,10 +7,24 @@ from app.db.models import Tenant
 
 
 @pytest.mark.asyncio
-async def test_payout_flow(client: AsyncClient, tenant: Tenant):
-    reg = await client.post(
-        "/v1/auth/affiliate/register",
+async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
+    admin_login = await client.post(
+        "/v1/auth/tenant/login",
+        json={"email": "admin@allbum.me", "password": "admin123"},
+    )
+    admin_token = admin_login.json()["token"]
+
+    invite = await client.post(
+        "/v1/admin/affiliates",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"email": "payout@example.com"},
+    )
+    invite_token = invite.json()["token"]
+
+    accept = await client.post(
+        "/v1/auth/affiliate/accept-invite",
         json={
+            "token": invite_token,
             "email": "payout@example.com",
             "password": "secret123",
             "name": "Payout Tester",
@@ -19,20 +33,14 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant):
             "paypal_email": "payout@example.com",
         },
     )
-    token = reg.json()["token"]
+    token = accept.json()["token"]
 
-    admin = await client.post(
-        "/v1/admin/affiliates/register",
-        headers={"X-API-Key": "test-api-key"},
-        json={
-            "email": "payout@example.com",
-            "password": "secret123",
-            "name": "Payout Tester",
-            "country": "US",
-            "tax_status": "us_person",
-        },
+    affiliates = await client.get(
+        "/v1/admin/affiliates",
+        headers={"Authorization": f"Bearer {admin_token}"},
     )
-    affiliate_id = admin.json()["id"]
+    account_id = accept.json()["account"]["id"]
+    affiliate_id = next(a["id"] for a in affiliates.json() if a["account_id"] == account_id)
 
     # create campaign
     camp = await client.post(
@@ -45,7 +53,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant):
     # approve KYC
     await client.post(
         f"/v1/admin/affiliates/{affiliate_id}/approve",
-        headers={"X-API-Key": "test-api-key"},
+        headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     # sale event with payment record
@@ -91,7 +99,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant):
     # approve payout
     aprv = await client.post(
         f"/v1/admin/payouts/{payout_id}/approve",
-        headers={"X-API-Key": "test-api-key"},
+        headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert aprv.status_code == 200
     assert aprv.json()["status"] == "approved"

@@ -1,28 +1,27 @@
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import get_current_affiliate_account, get_tenant
+from app.api.v1.dependencies import get_tenant
 from app.db.dependencies import get_db
-from app.db.models import Affiliate, AffiliateAccount, Tenant
-from app.schemas.affiliate import AffiliateCreate, AffiliateOut
-from app.schemas.affiliate_account import AffiliateAccountUpdate
+from app.db.models import Tenant
+from app.schemas.affiliate import AffiliateOut
+from app.schemas.affiliate_invite import AffiliateInviteCreate, AffiliateInviteOut
 from app.services import affiliate as affiliate_service
-from app.services import affiliate_account as acct_service
+from app.services import affiliate_invite as invite_service
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=AffiliateOut)
-async def admin_create_affiliate(
-    data: AffiliateCreate,
+@router.post("", response_model=AffiliateInviteOut)
+async def admin_create_invite(
+    data: AffiliateInviteCreate,
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    affiliate = await acct_service.create_tenant_affiliate(db, tenant, data)
-    return affiliate
+    invite = await invite_service.create_invite(db, tenant, data)
+    return invite
 
 
 @router.get("", response_model=list[AffiliateOut])

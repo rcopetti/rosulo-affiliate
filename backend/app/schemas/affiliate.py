@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AffiliateCreate(BaseModel):
@@ -20,4 +20,5 @@ class AffiliateOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     tenant_id: uuid.UUID
+    account_id: uuid.UUID = Field(validation_alias="affiliate_account_id")
     kyc_approved_for_payout: bool
