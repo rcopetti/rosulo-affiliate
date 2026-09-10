@@ -141,6 +141,7 @@ npx playwright test
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | PostgreSQL connection string |
+| `TEST_DATABASE_URL` | Optional test DB used by pytest; defaults to `<DATABASE_URL database>_test` |
 | `SECRET_KEY` | JWT and token signing key |
 | `PAYPAL_CLIENT_ID` | PayPal Payouts API client ID |
 | `PAYPAL_CLIENT_SECRET` | PayPal Payouts API secret |
