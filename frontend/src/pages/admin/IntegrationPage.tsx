@@ -91,26 +91,33 @@ export function IntegrationPage() {
     })
     .then(r => r.json())
     .then(data => {
-      if (data.click_id) localStorage.setItem('rosulo_click_id', data.click_id);
+      if (data.click_id) {
+        const apex = window.location.hostname.replace(/^www\./, '');
+        const cookieDomain = '.' + apex;
+        document.cookie = 'rosulo_click_id=' + data.click_id +
+          '; path=/; Secure; SameSite=Lax; Max-Age=2592000; domain=' + cookieDomain;
+      }
     });
   })();
 </script>`;
 
-  const clickAiPrompt = `I need to integrate public affiliate click tracking into a static website.
+  const clickAiPrompt = `I need to add the public Rosulo Affiliate click-tracking snippet to a website.
 
 Context:
-- The site domain is one of: ${domains.join(', ') || '[add allowed domains above]'}
-- The affiliate landing links have this format: https://<domain>/?rc=<TRACKING_CODE>
-- The public tracking endpoint is: POST ${apiBase}/tracking/track-click
-- This endpoint does NOT require the secret API key. It only requires a valid Origin header from an allowed domain.
+- Allowed domains: ${domains.join(', ') || '[add allowed domains above]'}
+- Public tracking endpoint: POST ${apiBase}/tracking/track-click
+- Affiliate landing links have this format: https://<domain>/?rc=<TRACKING_CODE>
 
 Please provide:
 1. A JavaScript snippet to include in the <head> of every landing page that:
-   - Returns immediately if the ?rc query parameter is missing, to avoid unnecessary API calls.
-   - If ?rc is present, calls the tracking endpoint with { tracking_code, referer, page_url }.
-   - Stores the returned click_id in localStorage as "rosulo_click_id" for later attribution.
-2. A brief explanation of how the CORS allowlist protects the endpoint.
-3. A note that the snippet should not expose the API key to the browser.`;
+   - Returns immediately if the URL does not contain a ?rc query parameter.
+   - If ?rc is present, sends { tracking_code, referer, page_url } to the tracking endpoint.
+   - The endpoint returns { click_id, campaign_id }.
+   - Sets a first-party cookie named "rosulo_click_id" with the returned click_id using:
+       path=/; Secure; SameSite=Lax; Max-Age=2592000 (30 days); domain=.<your-apex-domain>
+   - For the domain, compute the apex from the current hostname or hardcode it to the site apex (e.g. .allbum.me).
+2. A short note that this endpoint does not require the API key and is protected by an Origin allowlist.
+3. A note that the lead and sale backend handlers will read the "rosulo_click_id" cookie later.`;
 
   const saleCurl = `curl -X POST ${apiBase}/events \\
   -H "X-API-Key: ${apiKey || '<your-api-key>'}" \\
@@ -126,22 +133,66 @@ Please provide:
     "payment_sequence": 1
   }'`;
 
-  const saleAiPrompt = `I need to send server-to-server sale events to the Rosulo Affiliate API.
+  const saleAiPrompt = `I need a complete Rosulo Affiliate integration for my website. Please implement the full flow in the language of my project.
 
-Context:
+## Context
 - API base URL: ${apiBase}
 - Tenant ID: ${tenantId}
+- Server-to-server API key: ${apiKey || '<your-api-key>'}
 - Auth header: X-API-Key: ${apiKey || '<your-api-key>'}
 - Optional tenant header: X-Tenant-Id: ${tenantId}
-- Endpoint: POST /events
-- For sale events, include: event_id (unique idempotent id), type: "sale", campaign_id, customer_id, amount, currency, payment_sequence.
+- Events endpoint: POST ${apiBase}/events
+- Public click endpoint: POST ${apiBase}/tracking/track-click
+- Allowed domains: ${domains.join(', ') || '[add allowed domains above]'}
 
-Please provide:
-1. A backend function in the project's language that sends a sale event.
-2. The API key must come from an environment variable, never the frontend.
-3. Add idempotency: reuse the same event_id for retries and handle 5xx errors with a small backoff.
-4. Call the endpoint only after a successful payment is confirmed.
-5. Do not allow the frontend to call this endpoint directly.`;
+## 1. Frontend click tracking
+Add a JavaScript snippet in the <head> of every landing page:
+- Read the ?rc=<TRACKING_CODE> query parameter.
+- If ?rc is missing, do nothing.
+- If ?rc is present, POST to ${apiBase}/tracking/track-click with JSON body { tracking_code, referer, page_url }.
+- The endpoint returns { click_id, campaign_id }.
+- Set a first-party cookie named "rosulo_click_id" with the returned click_id, using:
+    path=/; Secure; SameSite=Lax; Max-Age=2592000 (30 days); domain=.<your-apex-domain>
+- Do not expose the API key in the browser. This endpoint relies on the Origin allowlist.
+
+## 2. Lead tracking (registration)
+When a user registers or signs up:
+- Read the "rosulo_click_id" cookie from the request.
+- If the cookie is missing, do not send a lead event.
+- If present, POST to ${apiBase}/events with:
+    - event_id: a unique idempotent id for this lead
+    - type: "lead"
+    - click_id: the value from the "rosulo_click_id" cookie
+    - customer_id: the user's internal id
+    - customer_email: the user's email masked for privacy. Masking rules:
+        - Split at "@" into local and domain parts.
+        - If the local part is 4 or fewer characters, replace the entire local part with "****".
+        - Otherwise keep the first 2 and last 1 character of the local part and replace the middle with "***".
+        - Example: john.doe@example.com -> jo***e@example.com; ab@example.com -> ****@example.com.
+- The backend will resolve the click_id to the correct campaign and affiliate.
+
+## 3. Sale tracking (payment)
+When a payment is confirmed:
+- Read the "rosulo_click_id" cookie from the request.
+- If the cookie is present, POST to ${apiBase}/events with:
+    - event_id: a unique idempotent id for this sale
+    - type: "sale"
+    - click_id: value from the cookie
+    - customer_id: the user's internal id
+    - amount: the payment amount (number)
+    - currency: 3-letter code such as "USD"
+    - payment_sequence: integer 1 for the first payment, 2 for the second, 3 for the third, etc.
+- If the cookie is missing, try to use the customer_id to associate the sale with a known lead/click; if not possible, do not send the event.
+- Call the endpoint only after the payment is confirmed and successful.
+
+## Constraints
+- The API key must be stored in an environment variable, never in the frontend or source code.
+- Mask customer_email before sending it.
+- Use the same event_id for retries to keep idempotency.
+- Add a small exponential backoff for HTTP 5xx responses.
+- Never call the server-to-server /events endpoint directly from the browser.
+
+Please output a complete, copy-paste-ready implementation: the frontend snippet, the backend lead handler, and the backend sale handler.`;
 
   if (isLoading) return <div className="p-4 text-slate-600">Loading integration settings…</div>;
 
@@ -245,7 +296,7 @@ Please provide:
                 content: (
                   <div className="space-y-4">
                     <p className="text-sm text-slate-600">
-                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and records a click using that public <code>tracking_code</code>. The API key is not exposed in the browser.
+                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and records a click using that public <code>tracking_code</code>. It stores the returned <code>click_id</code> in a first-party cookie named <code>rosulo_click_id</code> so lead and sale handlers can attribute conversions. The API key is not exposed in the browser.
                     </p>
                     <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
                       <code>{trackingSnippet}</code>
@@ -288,23 +339,51 @@ Please provide:
                 id: 'manual',
                 label: 'Manual',
                 content: (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div className="text-sm text-slate-600">
                       <p><strong>Base URL:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">{apiBase}</code></p>
                       <p className="mt-1"><strong>Auth header:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">X-API-Key: {apiKey || '&lt;your-api-key&gt;'}</code></p>
                       <p className="mt-1"><strong>Tenant header:</strong> <code className="rounded bg-slate-100 px-1 py-0.5">X-Tenant-Id: {tenantId || 'N/A'}</code></p>
                     </div>
 
-                    <h3 className="font-semibold text-slate-900">Tracking a sale</h3>
-                    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
-                      <code>{saleCurl}</code>
-                    </pre>
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-slate-900">Lead tracking</h3>
+                      <p className="text-sm text-slate-600">
+                        When a user registers, read the <code>rosulo_click_id</code> cookie. If it exists, send a <code>lead</code> event.
+                      </p>
+                      <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
+                        <code>{`curl -X POST ${apiBase}/events \\
+  -H "X-API-Key: ${apiKey || '<your-api-key>'}" \\
+  -H "X-Tenant-Id: ${tenantId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "event_id": "lead-001",
+    "type": "lead",
+    "click_id": "<rosulo_click_id-from-cookie>",
+    "customer_id": "user-123",
+    "customer_email": "jo***e@example.com"
+  }'`}</code>
+                      </pre>
+                      <p className="text-sm text-slate-600">
+                        Mask the email before sending: <code>john.doe@example.com</code> becomes <code>jo***e@example.com</code>.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-slate-900">Sale tracking</h3>
+                      <p className="text-sm text-slate-600">
+                        When a payment is confirmed, send a <code>sale</code> event. Use <code>payment_sequence</code> 1 for the first payment, 2 for the second, and so on.
+                      </p>
+                      <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
+                        <code>{saleCurl}</code>
+                      </pre>
+                    </div>
 
                     <h3 className="font-semibold text-slate-900">Supported event types</h3>
                     <ul className="list-disc pl-5 text-sm text-slate-600">
                       <li><code>click</code> — public tracking endpoint, requires allowed domain.</li>
-                      <li><code>lead</code> — server-to-server with API key.</li>
-                      <li><code>sale</code> — server-to-server with API key, include <code>amount</code>, <code>currency</code>, and <code>payment_sequence</code>.</li>
+                      <li><code>lead</code> — server-to-server with API key, send after registration.</li>
+                      <li><code>sale</code> — server-to-server with API key, send only after confirmed payment.</li>
                     </ul>
                   </div>
                 ),

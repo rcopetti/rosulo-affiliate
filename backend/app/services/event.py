@@ -16,6 +16,19 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         return existing
 
     affiliate_id = None
+    campaign_id = None
+
+    # Resolve attribution from a previous click if provided.
+    if data.click_id:
+        try:
+            click = await db.get(Event, uuid.UUID(data.click_id))
+        except ValueError:
+            click = None
+        if not click or click.type != "click" or click.tenant_id != tenant.id:
+            raise HTTPException(status_code=400, detail="Invalid or unknown click_id")
+        campaign_id = click.campaign_id
+        affiliate_id = click.affiliate_id
+
     if data.campaign_id:
         campaign_result = await db.execute(
             select(Campaign).where(
@@ -27,14 +40,16 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
         affiliate_id = campaign.affiliate_id
-    elif data.type in ("click", "lead"):
-        raise HTTPException(status_code=400, detail="click/lead require campaign_id")
+        campaign_id = campaign.id
+
+    if data.type in ("click", "lead") and not campaign_id:
+        raise HTTPException(status_code=400, detail="click/lead require campaign_id or click_id")
 
     event = Event(
         event_id=data.event_id,
         type=data.type,
         tenant_id=tenant.id,
-        campaign_id=uuid.UUID(data.campaign_id) if data.campaign_id else None,
+        campaign_id=campaign_id,
         affiliate_id=affiliate_id,
         customer_id=data.customer_id,
         customer_email=data.customer_email,
