@@ -2,8 +2,10 @@ import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { AffiliateLayout } from '@/components/layout/AffiliateLayout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
+import { AdminRegisterPage } from '@/pages/admin/RegisterPage';
 import { MerchantSelectPage } from '@/pages/affiliate/MerchantSelectPage';
 import { DashboardPage } from '@/pages/affiliate/DashboardPage';
 import { CampaignsPage } from '@/pages/affiliate/CampaignsPage';
@@ -42,7 +44,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to="/login" replace /> },
+      { index: true, element: <LandingPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'merchants', element: <MerchantSelectPage /> },
@@ -67,6 +69,7 @@ export const router = createBrowserRouter([
         ],
       },
       { path: 'admin/login', element: <AdminLoginPage /> },
+      { path: 'admin/register', element: <AdminRegisterPage /> },
       {
         path: 'admin',
         element: <AdminAuthGuard />,

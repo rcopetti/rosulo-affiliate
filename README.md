@@ -100,39 +100,13 @@ npm run dev
 
 The application will be available at `http://localhost:5173`.
 
-### 4. Create a tenant and admin user (first run)
+### 4. First run
 
-The backend does not ship with a default tenant or admin. Use the admin script or a one-off command to create them:
-
-```bash
-cd backend
-uv run python - <<'PY'
-import asyncio
-from app.db.session import async_session
-from app.db.models import Tenant, TenantUser
-from app.core.security import hash_api_key, hash_password
-
-async def seed():
-    async with async_session() as db:
-        tenant = Tenant(name='allbum', api_key_hash=hash_api_key('test-api-key'))
-        db.add(tenant)
-        await db.flush()
-        db.add(TenantUser(
-            tenant_id=tenant.id,
-            email='admin@allbum.me',
-            password_hash=hash_password('admin123'),
-            name='Admin',
-        ))
-        await db.commit()
-        print('Tenant:', tenant.id)
-
-asyncio.run(seed())
-PY
-```
-
-- Admin login: `admin@allbum.me` / `admin123` at `http://localhost:5173/admin/login`.
-- Affiliate accounts are created by accepting a tenant invitation. From the admin dashboard, create an invite, then open the registration link (e.g. `http://localhost:5173/register?token=...&email=...`).
-- Server-to-server event ingestion uses the tenant API key (`X-API-Key` header).
+1. Open the landing page at `http://localhost:5173/`.
+2. Choose **Merchants → Sign up** to create a tenant and admin user.
+3. Save the generated API key — it is shown only once and is required for server-to-server event ingestion (`X-API-Key` header).
+4. Log in as a merchant at `http://localhost:5173/admin/login`.
+5. Affiliate accounts are created by accepting a tenant invitation. From the admin dashboard, create an invite, then open the registration link (e.g. `http://localhost:5173/register?token=...&email=...`).
 
 ---
 

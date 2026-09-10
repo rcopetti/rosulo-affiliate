@@ -3,6 +3,25 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_tenant_user_register(client: AsyncClient):
+    register = await client.post(
+        "/v1/auth/tenant/register",
+        json={
+            "tenant_name": "New Merchant",
+            "email": "new@merchant.com",
+            "password": "merchant123",
+            "admin_name": "Merchant Admin",
+        },
+    )
+    assert register.status_code == 200
+    body = register.json()
+    assert "token" in body
+    assert body["tenant"]["name"] == "New Merchant"
+    assert body["user"]["email"] == "new@merchant.com"
+    assert len(body["api_key"]) > 0
+
+
+@pytest.mark.asyncio
 async def test_tenant_user_login(client: AsyncClient, tenant_user):
     login = await client.post(
         "/v1/auth/tenant/login",
