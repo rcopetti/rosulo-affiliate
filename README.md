@@ -142,7 +142,7 @@ npx playwright test
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_API_BASE_URL` | Backend API base URL |
+| `VITE_API_BASE_URL` | Backend API base URL (default `/api/v1`, proxied by Vite dev server to `/v1` on the backend) |
 
 ---
 
