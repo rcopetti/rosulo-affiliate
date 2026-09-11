@@ -15,7 +15,7 @@ class EventCreate(BaseModel):
     customer_email: str | None = None
     amount: float = 0.0
     currency: str = "USD"
-    payment_sequence: int = 1
+    payment_sequence: int = 0
     good_date: date | None = None
     payment_record_id: str | None = None
     referer: str | None = None
