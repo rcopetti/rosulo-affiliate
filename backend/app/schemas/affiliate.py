@@ -1,3 +1,4 @@
+import datetime
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +18,14 @@ class AffiliateCreate(BaseModel):
     backup_withholding_required: bool = False
 
 
+class AffiliateDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    document_type: str
+    approved: bool
+    created_at: datetime.datetime
+
+
 class AffiliateOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -28,4 +37,9 @@ class AffiliateOut(BaseModel):
     state: str | None = None
     postal_code: str | None = None
     paypal_email: str | None = None
+    tax_status: str | None = None
+    tax_entity_type: str | None = None
+    business_name: str | None = None
+    tax_form_type: str | None = None
+    documents: list[AffiliateDocumentOut] = []
     kyc_approved_for_payout: bool

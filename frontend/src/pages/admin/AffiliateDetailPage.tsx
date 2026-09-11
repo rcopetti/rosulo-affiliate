@@ -1,7 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { PencilLine } from 'lucide-react';
-import { approveKyc, getAffiliate, rejectKyc } from '@/api/admin/affiliates';
+import { approveKyc, getAffiliate, rejectKyc, viewAffiliateDocument } from '@/api/admin/affiliates';
 import { getContract } from '@/api/admin/contracts';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -14,6 +15,12 @@ export function AffiliateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
+  const [documentPreviewType, setDocumentPreviewType] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
+  }, [documentPreviewUrl]);
   const { data, isLoading } = useQuery({
     queryKey: ['admin-affiliate', id],
     queryFn: () => getAffiliate(id!),
@@ -101,6 +108,44 @@ export function AffiliateDetailPage() {
             Reject KYC
           </Button>
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tax documents</CardTitle>
+        </CardHeader>
+        {data.documents?.length ? (
+          <div className="space-y-2">
+            {data.documents.map((document) => (
+              <div key={document.id} className="flex items-center justify-between gap-4 rounded-lg border border-line p-3">
+                <div>
+                  <p className="text-sm font-medium text-fg">{document.document_type}</p>
+                  <p className="text-xs text-fg-muted">{document.approved ? 'Approved' : 'Pending review'}</p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      setDocumentPreviewUrl(await viewAffiliateDocument(id!, document.id));
+                      setDocumentPreviewType(document.document_type);
+                    } catch {
+                      toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
+                    }
+                  }}
+                >
+                  View securely
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-fg-muted">No tax documents uploaded.</p>}
+        {documentPreviewUrl && (
+          <div className="mt-4 overflow-hidden rounded-lg border border-line">
+            <div className="border-b border-line px-3 py-2 text-xs font-medium text-fg-muted">Secure preview: {documentPreviewType}</div>
+            <iframe title="Secure tax document preview" src={`${documentPreviewUrl}#toolbar=0&download=0&navpanes=0`} className="h-[32rem] w-full" />
+          </div>
+        )}
       </Card>
 
       <Card>

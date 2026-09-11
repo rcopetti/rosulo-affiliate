@@ -19,5 +19,11 @@ class Settings(BaseSettings):
     ses_region: str = "us-east-1"
     frontend_url: str = "http://localhost:5173"
 
+    # Encrypted affiliate document storage (S3-compatible)
+    documents_s3_bucket: str | None = None
+    documents_s3_region: str = "us-east-1"
+    documents_encryption_key: str | None = None
+    documents_max_bytes: int = 10 * 1024 * 1024
+
 
 settings = Settings()

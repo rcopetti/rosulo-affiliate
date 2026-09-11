@@ -30,6 +30,13 @@ export interface Document {
   uploaded_at: string;
 }
 
+export interface AffiliateDocument {
+  id: string;
+  document_type: string;
+  approved: boolean;
+  created_at: string;
+}
+
 export interface Affiliate {
   id: string;
   account_id: string;
@@ -44,6 +51,7 @@ export interface Affiliate {
   tax_entity_type?: 'individual' | 'business' | null;
   business_name?: string | null;
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
+  documents?: AffiliateDocument[];
   kyc_approved_for_payout: boolean;
   enabled: boolean;
   contract?: Contract;

@@ -117,7 +117,9 @@ class AffiliateDocument(Base):
         UUID(as_uuid=True), ForeignKey("affiliate_accounts.id"), nullable=False
     )
     document_type = Column(String, nullable=False)
-    document_url = Column(String, nullable=False)
+    document_url = Column(String, nullable=False)  # private S3 object key
+    content_type = Column(String, nullable=False, default="application/octet-stream")
+    file_size = Column(Integer, nullable=False, default=0)
     approved = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     account = relationship("AffiliateAccount", back_populates="documents")

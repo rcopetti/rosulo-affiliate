@@ -11,11 +11,17 @@ export async function updateProfile(data: Partial<AffiliateAccount>): Promise<Af
   return res.data;
 }
 
-export async function uploadDocument(file: File, type: string): Promise<void> {
+export async function uploadDocument(file: File, type: string): Promise<{ id: string; document_type: string }> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', type);
-  await api.post('/affiliate/documents', formData, {
+  const res = await api.post<{ id: string; document_type: string }>('/affiliate/documents', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return res.data;
+}
+
+export async function viewDocument(documentId: string): Promise<string> {
+  const res = await api.get(`/affiliate/documents/${documentId}/view`, { responseType: 'blob' });
+  return URL.createObjectURL(res.data);
 }
