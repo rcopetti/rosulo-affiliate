@@ -41,8 +41,11 @@ async def update_contract(
     contract = await contract_service.get_contract_for_affiliate(db, affiliate["id"])
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
-    for key, value in update.model_dump(exclude_unset=True).items():
+    update_data = update.model_dump(exclude_unset=True, exclude={"terms"})
+    for key, value in update_data.items():
         setattr(contract, key, value)
+    if update.terms is not None:
+        await contract_service.sync_terms(db, contract, update.terms)
     await db.commit()
     await db.refresh(contract)
     return contract
