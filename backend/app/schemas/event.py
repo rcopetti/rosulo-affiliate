@@ -32,6 +32,7 @@ class EventOut(BaseModel):
     type: str
     tenant_id: uuid.UUID
     campaign_id: uuid.UUID | None = None
+    affiliate_id: uuid.UUID | None = None
     customer_id: str | None = None
     amount: float
     currency: str

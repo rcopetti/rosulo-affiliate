@@ -5,14 +5,18 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EventsTable } from '@/components/admin/EventsTable';
 import { Pagination } from '@/components/ui/Pagination';
 
-const PAGE_SIZE = 20;
-
 export function EventsPage() {
   const [skip, setSkip] = useState(0);
+  const [limit, setLimit] = useState(20);
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-events', skip],
-    queryFn: () => getAdminEvents(undefined, { skip, limit: PAGE_SIZE }),
+    queryKey: ['admin-events', skip, limit],
+    queryFn: () => getAdminEvents(undefined, { skip, limit }),
   });
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setSkip(0);
+  };
 
   return (
     <div className="space-y-4">
@@ -26,12 +30,13 @@ export function EventsPage() {
         ) : (
           <div className="space-y-2">
             <EventsTable events={data?.items || []} />
-            {data && data.total > PAGE_SIZE && (
+            {data && (
               <Pagination
                 skip={data.skip}
                 limit={data.limit}
                 total={data.total}
                 onSkipChange={setSkip}
+                onLimitChange={handleLimitChange}
               />
             )}
           </div>

@@ -105,6 +105,7 @@ export interface Balance {
 
 export interface Event {
   id: string;
+  event_id: string;
   type: 'click' | 'lead' | 'sale';
   tenant_id: string;
   campaign_id?: string;
