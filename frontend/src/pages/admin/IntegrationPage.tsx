@@ -91,10 +91,10 @@ export function IntegrationPage() {
     })
     .then(r => r.json())
     .then(data => {
-      if (data.click_id) {
+      if (data.rosulo_click_id) {
         const apex = window.location.hostname.replace(/^www\./, '');
         const cookieDomain = '.' + apex;
-        document.cookie = 'rosulo_click_id=' + data.click_id +
+        document.cookie = 'rosulo_click_id=' + data.rosulo_click_id +
           '; path=/; Secure; SameSite=Lax; Max-Age=2592000; domain=' + cookieDomain;
       }
     });
@@ -116,8 +116,8 @@ Please provide:
    - If ?rc is present, sends { tracking_code, referer, page_url } to the website's own backend endpoint /api/v1/tracking/track-click.
    - The website backend should then create a click in Rosulo by calling ${apiBase}/events with the API key and this JSON body:
        { "event_id": "<unique-id>", "type": "click", "tracking_code": "<tracking_code>", "referer": "<referer>", "page_url": "<page_url>" }
-   - The backend should return the "id" field from the Rosulo response to the browser.
-   - Sets a first-party cookie named "rosulo_click_id" with the returned id (click_id) using:
+   - The backend should return JSON { "rosulo_click_id": "<id>" } to the browser, where <id> is the "id" field from the Rosulo response.
+   - Sets a first-party cookie named "rosulo_click_id" with the returned rosulo_click_id using:
        path=/; Secure; SameSite=Lax; Max-Age=2592000 (30 days); domain=.<your-apex-domain>
    - For the domain, compute the apex from the current hostname or hardcode it to the site apex (e.g. .allbum.me).
 2. A short note that the browser never calls the Rosulo API directly and that the API key must not be exposed in the browser.
@@ -149,17 +149,19 @@ Please provide:
 - Tenant public click endpoint (called from the browser): POST <your-backend-domain>/api/v1/tracking/track-click
 - Allowed domains: ${domains.join(', ') || '[add allowed domains above]'}
 
-## 1. Frontend click tracking
-Add a JavaScript snippet in the <head> of every landing page:
-- Read the ?rc=<TRACKING_CODE> query parameter.
-- If ?rc is missing, do nothing.
-- If ?rc is present, POST to your own backend endpoint /api/v1/tracking/track-click (or https://<your-backend-domain>/api/v1/tracking/track-click) with JSON body { tracking_code, referer, page_url }.
-- Your backend should create the click in Rosulo by calling POST ${apiBase}/events with the API key and this JSON:
-    { "event_id": "<unique-id>", "type": "click", "tracking_code": "<tracking_code>", "referer": "<referer>", "page_url": "<page_url>" }
-- Your backend returns the "id" field from the Rosulo response to the browser.
-- Set a first-party cookie named "rosulo_click_id" with the returned id (click_id), using:
-    path=/; Secure; SameSite=Lax; Max-Age=2592000 (30 days); domain=.<your-apex-domain>
-- Do not expose the Rosulo API key in the browser and do not call the Rosulo API directly from the browser.
+## 1. Tenant public click endpoint (POST /api/v1/tracking/track-click)
+Implement this backend endpoint. It is called by the browser landing-page snippet.
+- Request body from the browser: { tracking_code, referer, page_url }
+- Validate that tracking_code, referer, and page_url are present.
+- Generate a unique event_id for idempotency.
+- Call the Rosulo Affiliate events endpoint POST ${apiBase}/events with:
+    - Header: X-API-Key: ${apiKey || '<your-api-key>'}
+    - Optional header: X-Tenant-Id: ${tenantId}
+    - JSON body:
+        { "event_id": "<unique-id>", "type": "click", "tracking_code": "<tracking_code>", "referer": "<referer>", "page_url": "<page_url>" }
+- On success, extract the "id" field from the Rosulo response and return JSON { "rosulo_click_id": "<id>", "campaign_id": "<campaign_id>" } to the browser.
+- The browser will use rosulo_click_id to set the "rosulo_click_id" cookie.
+- Do not expose the Rosulo API key in the response, logs, or browser.
 
 ## 2. Lead tracking (registration)
 When a user registers or signs up:
@@ -199,7 +201,7 @@ When a payment is confirmed:
 - Add a small exponential backoff for HTTP 5xx responses.
 - Never call the server-to-server /events endpoint directly from the browser.
 
-Please output a complete, copy-paste-ready implementation: the frontend snippet, the backend lead handler, and the backend sale handler.`;
+Please output a complete, copy-paste-ready implementation: the tenant backend click endpoint (POST /api/v1/tracking/track-click), the backend lead handler, and the backend sale handler.`;
 
   if (isLoading) return <div className="p-4 text-slate-600">Loading integration settings…</div>;
 
@@ -303,7 +305,7 @@ Please output a complete, copy-paste-ready implementation: the frontend snippet,
                 content: (
                   <div className="space-y-4">
                     <p className="text-sm text-slate-600">
-                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and sends the tracking data to your own backend endpoint <code>/api/v1/tracking/track-click</code>. Your backend should create the click in Rosulo by calling <code>POST ${apiBase}/events</code> with the API key, <code>type: "click"</code>, and the <code>tracking_code</code>, then return the <code>id</code> from the response. The snippet stores that <code>id</code> in a first-party cookie named <code>rosulo_click_id</code> so lead and sale handlers can attribute conversions. The Rosulo API key is not exposed in the browser.
+                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and sends the tracking data to your own backend endpoint <code>/api/v1/tracking/track-click</code>. Your backend should create the click in Rosulo by calling <code>POST ${apiBase}/events</code> with the API key, <code>type: "click"</code>, and the <code>tracking_code</code>, then return a JSON object with a <code>rosulo_click_id</code> field containing the returned <code>id</code>. The snippet stores <code>rosulo_click_id</code> in a first-party cookie so lead and sale handlers can attribute conversions. The Rosulo API key is not exposed in the browser.
                     </p>
                     <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
                       <code>{trackingSnippet}</code>
