@@ -50,7 +50,7 @@ export function AffiliateDetailPage() {
         <CardHeader>
           <CardTitle>Affiliate details</CardTitle>
         </CardHeader>
-        <div className="space-y-3 p-6 pt-0">
+        <div className="space-y-3">
           <p className="text-sm text-slate-600">Email: {data.email}</p>
           <p className="flex items-center gap-2 text-sm text-slate-600">
             KYC: <KycStatusBadge approved={data.kyc_approved_for_payout} />

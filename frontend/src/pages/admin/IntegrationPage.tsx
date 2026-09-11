@@ -218,7 +218,7 @@ Please output a complete, copy-paste-ready implementation: the tenant backend cl
             Allowed domains
           </CardTitle>
         </CardHeader>
-        <div className="space-y-4 px-6 pb-6">
+        <div className="space-y-4">
           <p className="text-sm text-slate-600">
             Only requests from these domains can call the public click-tracking endpoint. Use <code>*.allbum.me</code> to allow all subdomains.
           </p>
@@ -258,7 +258,7 @@ Please output a complete, copy-paste-ready implementation: the tenant backend cl
             API Key
           </CardTitle>
         </CardHeader>
-        <div className="space-y-4 px-6 pb-6">
+        <div className="space-y-4">
           <p className="text-sm text-slate-600">
             Use this key to send server-to-server events to Rosulo Affiliate. Keep it secret.
           </p>
@@ -297,7 +297,7 @@ Please output a complete, copy-paste-ready implementation: the tenant backend cl
             Direct tracking snippet
           </CardTitle>
         </CardHeader>
-        <div className="px-6 pb-6">
+        <div className="">
           <Tabs
             defaultTab="manual"
             tabs={[
@@ -342,7 +342,7 @@ Please output a complete, copy-paste-ready implementation: the tenant backend cl
         <CardHeader>
           <CardTitle>Server-to-server event API</CardTitle>
         </CardHeader>
-        <div className="px-6 pb-6">
+        <div className="">
           <Tabs
             defaultTab="manual"
             tabs={[

@@ -45,7 +45,7 @@ export function RequestPayoutPage() {
         <CardHeader>
           <CardTitle>Available balance</CardTitle>
         </CardHeader>
-        <div className="px-6 pb-6">
+        <div className="">
           <p className="text-4xl font-bold text-slate-900">{formatCurrency(balance.available, balance.currency)}</p>
           <p className="mt-2 flex items-center gap-2 text-sm text-slate-600">
             KYC status: <KycStatusBadge approved={kycApproved} />

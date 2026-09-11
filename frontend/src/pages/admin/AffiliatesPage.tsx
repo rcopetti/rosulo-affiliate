@@ -22,7 +22,7 @@ export function AffiliatesPage() {
           <CardTitle>Affiliate list</CardTitle>
         </CardHeader>
         {isLoading ? (
-          <p className="p-4 text-slate-600">Loading…</p>
+          <p className="text-sm text-fg-muted">Loading…</p>
         ) : (
           <Table>
             <TableHead>

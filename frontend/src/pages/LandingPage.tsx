@@ -22,7 +22,7 @@ export function LandingPage() {
             <CardHeader>
               <CardTitle>For merchants</CardTitle>
             </CardHeader>
-            <div className="space-y-4 px-6 pb-6">
+            <div className="space-y-4">
               <p className="text-sm text-slate-600">
                 Manage affiliates, track performance, review KYC and approve
                 payouts from your tenant dashboard.
@@ -38,7 +38,7 @@ export function LandingPage() {
             <CardHeader>
               <CardTitle>For affiliates</CardTitle>
             </CardHeader>
-            <div className="space-y-4 px-6 pb-6">
+            <div className="space-y-4">
               <p className="text-sm text-slate-600">
                 Accept a tenant invitation, create tracking campaigns, and
                 request payouts once your commissions are available.

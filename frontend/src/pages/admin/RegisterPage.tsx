@@ -42,7 +42,7 @@ export function AdminRegisterPage() {
           <CardHeader>
             <CardTitle>Your API key</CardTitle>
           </CardHeader>
-          <div className="space-y-4 px-6 pb-6">
+          <div className="space-y-4">
             <p className="text-sm text-slate-600">
               Copy this key now. It will not be shown again and is required for server-to-server event ingestion.
             </p>

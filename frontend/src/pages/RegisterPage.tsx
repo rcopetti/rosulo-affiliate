@@ -93,7 +93,7 @@ export function RegisterPage() {
           <CardHeader>
             <CardTitle>Invalid invite</CardTitle>
           </CardHeader>
-          <p className="px-6 pb-6 text-sm text-slate-600">
+          <p className="text-sm text-fg-muted">
             Affiliate accounts are created by accepting a tenant invitation.
             Please use the link from your invitation email.
           </p>
@@ -109,7 +109,7 @@ export function RegisterPage() {
           <CardHeader>
             <CardTitle>Accept invitation</CardTitle>
           </CardHeader>
-          <div className="space-y-4 px-6 pb-6">
+          <div className="space-y-4">
             <p className="text-sm text-slate-600">
               You have been invited to join <strong>{invite.tenant_name}</strong>.
             </p>

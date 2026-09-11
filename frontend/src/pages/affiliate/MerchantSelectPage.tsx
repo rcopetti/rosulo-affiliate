@@ -39,7 +39,7 @@ export function MerchantSelectPage() {
               <button
                 key={m.id}
                 onClick={() => handleSelect(m.id)}
-                className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-brand-500 hover:shadow-sm"
+                className="w-full cursor-pointer rounded-lg border border-line bg-surface p-4 text-left transition hover:border-primary hover:shadow-sm"
               >
                 <p className="font-semibold text-slate-900">{m.name}</p>
               </button>

@@ -9,7 +9,7 @@ interface CardProps {
 
 export function Card({ children, className, variant = 'default' }: CardProps) {
   const variants = {
-    default: 'rounded-xl border border-line bg-surface shadow-sm',
+    default: 'rounded-xl border border-line bg-surface p-6 shadow-sm',
     bordered: 'rounded-xl border border-line bg-surface',
     flat: 'rounded-xl bg-surface-muted',
   };
