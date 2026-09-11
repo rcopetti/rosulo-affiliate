@@ -5,15 +5,17 @@ import { AffiliateAccount } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { FormField } from '@/components/ui/FormField';
+import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 
 const schema = z.object({
-  name: z.string().min(1),
-  country: z.string().min(1),
+  name: z.string().min(1, 'Full name is required'),
+  country: z.string().min(1, 'Country is required'),
   state: z.string().optional(),
   tax_id: z.string().optional(),
   tax_status: z.enum(['us_person', 'non_us_person']),
   tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).optional(),
-  paypal_email: z.string().email(),
+  paypal_email: z.string().email('Enter a valid PayPal email'),
 });
 
 export type ProfileFormData = z.infer<typeof schema>;
@@ -45,22 +47,26 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <Input label="Full name" {...register('name')} error={errors.name?.message} />
-      <Input label="Country" {...register('country')} error={errors.country?.message} />
+      <FormErrorSummary errors={errors} />
+      <Input label="Full name" required {...register('name')} error={errors.name?.message} />
+      <Input label="Country" required {...register('country')} error={errors.country?.message} />
       <Input label="State / province" {...register('state')} error={errors.state?.message} />
       <Input label="Tax ID" {...register('tax_id')} error={errors.tax_id?.message} />
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Tax status</label>
-        <Select
-          value={account.tax_status || 'us_person'}
-          onChange={(v) => setValue('tax_status', v as 'us_person' | 'non_us_person')}
-          options={[
-            { value: 'us_person', label: 'US person' },
-            { value: 'non_us_person', label: 'Non-US person' },
-          ]}
-        />
-      </div>
-      <Input label="PayPal email" type="email" {...register('paypal_email')} error={errors.paypal_email?.message} />
+      <FormField label="Tax status" error={errors.tax_status?.message} required>
+        {(aria) => (
+          <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+            <Select
+              value={account.tax_status || 'us_person'}
+              onChange={(v) => setValue('tax_status', v as 'us_person' | 'non_us_person', { shouldValidate: true })}
+              options={[
+                { value: 'us_person', label: 'US person' },
+                { value: 'non_us_person', label: 'Non-US person' },
+              ]}
+            />
+          </div>
+        )}
+      </FormField>
+      <Input label="PayPal email" type="email" required {...register('paypal_email')} error={errors.paypal_email?.message} />
       <Button type="submit" isLoading={isLoading}>
         Save profile
       </Button>

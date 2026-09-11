@@ -16,7 +16,7 @@ export function ContractForm({ terms, onSubmit, isLoading }: ContractFormProps) 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {fields.map((field, index) => (
-        <div key={field.id} className="grid gap-2 rounded-lg border border-slate-200 p-4 sm:grid-cols-4">
+        <div key={field.id} className="grid gap-2 rounded-lg border border-line bg-surface p-4 sm:grid-cols-4">
           <input type="hidden" {...register(`terms.${index}.id`)} defaultValue={field.id} />
           <Input label="Sequence" {...register(`terms.${index}.payment_sequence`)} />
           <Input label="Commission %" type="number" {...register(`terms.${index}.commission_percent`)} />

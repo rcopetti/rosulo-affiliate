@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { registerSchema, RegisterInput } from '@/lib/validators';
 import { useToast } from '@/components/ui/Toast';
+import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 import { PendingInvite } from '@/api/types';
 
 export function RegisterPage() {
@@ -138,11 +139,12 @@ export function RegisterPage() {
         <CardHeader>
           <CardTitle>Create affiliate account</CardTitle>
         </CardHeader>
-        <form onSubmit={handleSubmit((v) => registerMutation.mutate(v))} className="space-y-4">
-          <Input label="Email" type="email" {...register('email')} error={errors.email?.message} defaultValue={email} />
-          <Input label="Password" type="password" {...register('password')} error={errors.password?.message} />
-          <Input label="Full name" {...register('name')} error={errors.name?.message} />
-          <Input label="Country" {...register('country')} error={errors.country?.message} />
+        <form onSubmit={handleSubmit((v) => registerMutation.mutate(v))} className="space-y-4" noValidate>
+          <FormErrorSummary errors={errors} />
+          <Input label="Email" type="email" required {...register('email')} error={errors.email?.message} defaultValue={email} />
+          <Input label="Password" type="password" required {...register('password')} error={errors.password?.message} />
+          <Input label="Full name" required {...register('name')} error={errors.name?.message} />
+          <Input label="Country" required {...register('country')} error={errors.country?.message} />
           <Input label="State / province" {...register('state')} error={errors.state?.message} />
           <Button type="submit" isLoading={registerMutation.isPending} className="w-full">
             Create account

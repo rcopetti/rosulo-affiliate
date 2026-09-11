@@ -37,7 +37,7 @@ export function RequestPayoutPage() {
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-bold text-slate-900">Request Payout</h1>
       {!kycApproved && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning-fg" role="status">
           Your documents are not yet approved. You cannot request a payout until KYC is approved.
         </div>
       )}
