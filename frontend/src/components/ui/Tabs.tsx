@@ -21,14 +21,32 @@ export function Tabs({ tabs, defaultTab, onChange }: TabsProps) {
     onChange?.(id);
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextId = tabs[nextIndex].id;
+    setActive(nextId);
+    onChange?.(nextId);
+    document.getElementById(`tab-${nextId}`)?.focus();
+  };
+
   return (
     <div>
       <div role="tablist" className="flex gap-1 border-b border-line">
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <button
             key={tab.id}
+            id={`tab-${tab.id}`}
             role="tab"
             aria-selected={active === tab.id}
+            aria-controls={`tabpanel-${tab.id}`}
+            tabIndex={active === tab.id ? 0 : -1}
+            onKeyDown={(e) => handleKeyDown(e, index)}
             onClick={() => select(tab.id)}
             className={cn(
               'cursor-pointer rounded-t-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
@@ -41,7 +59,7 @@ export function Tabs({ tabs, defaultTab, onChange }: TabsProps) {
           </button>
         ))}
       </div>
-      <div role="tabpanel" className="pt-4">
+      <div id={`tabpanel-${active}`} role="tabpanel" aria-labelledby={`tab-${active}`} className="pt-4">
         {tabs.find((tab) => tab.id === active)?.content}
       </div>
     </div>
