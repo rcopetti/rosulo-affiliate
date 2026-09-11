@@ -137,9 +137,11 @@ Please provide:
     "payment_sequence": 1
   }'`;
 
-  const saleAiPrompt = `I need a complete Rosulo Affiliate integration for my website. Please implement the full flow in the language of my project.
+  const saleAiPrompt = `I need a complete Rosulo Affiliate integration for my service. Please implement the full flow based on my backend service <your-backend-service-name>.
 
 ## Context
+Declare those environment variables on config files if it is available
+
 - Rosulo Affiliate API base URL: ${apiBase}
 - Tenant ID: ${tenantId}
 - Server-to-server API key: ${apiKey || '<your-api-key>'}
