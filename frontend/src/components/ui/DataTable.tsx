@@ -68,7 +68,7 @@ export function DataTable<T>({
   }
 
   return (
-    <Table>
+    <Table className="w-full table-fixed">
       <TableHead>
         <TableRow>
           {columns.map((col) => (

@@ -36,10 +36,26 @@ export function PortalShell({ brand, brandTo, nav, onLogout, topbarRight }: Port
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur">
         <div className="flex h-14 items-center justify-between gap-4 px-4">
-          <Link to={brandTo} className="flex items-center gap-2 text-lg font-bold text-primary">
-            <img src="/logo.svg" alt="" className="h-6 w-6" aria-hidden="true" />
-            <span className="hidden sm:inline">{brand}</span>
-          </Link>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="hidden md:inline-flex"
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
+            </Button>
+            <Link to={brandTo} className="flex items-center gap-2 text-lg font-bold text-primary">
+              <img src="/logo.svg" alt="" className="h-6 w-6" aria-hidden="true" />
+              <span className="hidden sm:inline">{brand}</span>
+            </Link>
+          </div>
           <div className="flex items-center gap-1">
             {topbarRight}
             <ThemeToggle />
@@ -82,21 +98,6 @@ export function PortalShell({ brand, brandTo, nav, onLogout, topbarRight }: Port
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <>
-                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-                Collapse
-              </>
-            )}
-          </button>
         </nav>
 
         <main id="main-content" className="min-w-0 flex-1 pb-20 md:pb-0">

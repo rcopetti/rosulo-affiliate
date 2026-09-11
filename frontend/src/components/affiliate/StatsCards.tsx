@@ -31,7 +31,7 @@ export function StatsCards({ earned, pending, available, paid, currency }: Stats
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {items.map((i) => (
         <Card key={i.label} className="p-5">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm text-fg-muted">{i.label}</p>
               <p className="mt-1 truncate text-2xl font-bold tracking-tight text-fg">

@@ -15,7 +15,7 @@ const columns: Column<Commission>[] = [
     key: 'event_id',
     header: 'Event',
     render: (c) => <span className="font-mono text-xs">{c.event_id}</span>,
-    className: 'truncate font-mono text-xs max-w-0 w-full',
+    className: 'truncate font-mono text-xs',
   },
   {
     key: 'gross_amount',
