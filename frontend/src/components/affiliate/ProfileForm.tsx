@@ -11,11 +11,11 @@ import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 const schema = z.object({
   name: z.string().min(1, 'Full name is required'),
   country: z.string().min(1, 'Country is required'),
-  state: z.string().optional(),
+  state: z.string().nullish(),
   postal_code: z.string().min(1, 'Postal code is required'),
-  tax_id: z.string().optional(),
-  tax_status: z.enum(['us_person', 'non_us_person']).optional(),
-  tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).optional(),
+  tax_id: z.string().nullish(),
+  tax_status: z.enum(['us_person', 'non_us_person']).nullish(),
+  tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).nullish(),
   paypal_email: z.string().email('Enter a valid PayPal email'),
 });
 
@@ -42,7 +42,7 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
       postal_code: account.postal_code || '',
       tax_id: account.tax_id || '',
       tax_status: account.tax_status || 'us_person',
-      tax_form_type: account.tax_form_type,
+      tax_form_type: account.tax_form_type ?? undefined,
       paypal_email: account.paypal_email || '',
     },
   });

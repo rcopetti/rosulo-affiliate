@@ -9,13 +9,13 @@ export interface AffiliateAccount {
   id: string;
   email: string;
   name: string;
-  country?: string;
-  state?: string;
-  postal_code?: string;
-  tax_id?: string;
-  tax_status?: 'us_person' | 'non_us_person';
-  tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E';
-  paypal_email?: string;
+  country?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  tax_id?: string | null;
+  tax_status?: 'us_person' | 'non_us_person' | null;
+  tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
+  paypal_email?: string | null;
   backup_withholding_required?: boolean;
   documents?: Document[];
 }
@@ -34,10 +34,10 @@ export interface Affiliate {
   tenant_id: string;
   email: string;
   name: string;
-  country?: string;
-  state?: string;
-  postal_code?: string;
-  paypal_email?: string;
+  country?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  paypal_email?: string | null;
   kyc_approved_for_payout: boolean;
   enabled: boolean;
   contract?: Contract;
