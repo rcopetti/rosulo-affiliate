@@ -9,6 +9,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.models import Affiliate, AffiliateAccount, AffiliateDocument, Contract, Tenant, Term
 from app.schemas.affiliate_account import AffiliateAccountCreate, AffiliateAccountUpdate
 from app.schemas.auth import AffiliateLogin, AffiliateRegister
+from app.services.tax_profile import derive_tax_form_type
 
 
 async def register_account(db: AsyncSession, data: AffiliateRegister) -> AffiliateAccount:
@@ -23,7 +24,9 @@ async def register_account(db: AsyncSession, data: AffiliateRegister) -> Affilia
         state=data.state,
         postal_code=data.postal_code,
         tax_status=data.tax_status,
-        tax_form_type=data.tax_form_type,
+        tax_entity_type=data.tax_entity_type,
+        business_name=data.business_name,
+        tax_form_type=derive_tax_form_type(data.tax_status, data.tax_entity_type),
         paypal_email=data.paypal_email,
     )
     db.add(account)
@@ -43,8 +46,14 @@ async def authenticate_account(db: AsyncSession, data: AffiliateLogin) -> Affili
 async def update_account(
     db: AsyncSession, account: AffiliateAccount, data: AffiliateAccountUpdate
 ) -> AffiliateAccount:
-    for key, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True, exclude={"tax_form_type"})
+    for key, value in updates.items():
         setattr(account, key, value)
+    if "tax_status" in updates or "tax_entity_type" in updates:
+        account.tax_form_type = derive_tax_form_type(
+            updates.get("tax_status", account.tax_status),
+            updates.get("tax_entity_type", account.tax_entity_type),
+        )
     await db.commit()
     await db.refresh(account)
     return account
@@ -71,7 +80,9 @@ async def create_tenant_affiliate(
             postal_code=data.postal_code,
             tax_id=data.tax_id,
             tax_status=data.tax_status,
-            tax_form_type=data.tax_form_type,
+            tax_entity_type=data.tax_entity_type,
+            business_name=data.business_name,
+            tax_form_type=derive_tax_form_type(data.tax_status, data.tax_entity_type),
             paypal_email=data.paypal_email,
             backup_withholding_required=data.backup_withholding_required,
         )

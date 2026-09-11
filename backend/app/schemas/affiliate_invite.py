@@ -31,6 +31,8 @@ class AffiliateInviteAccept(BaseModel):
     state: str | None = None
     postal_code: str | None = None
     tax_status: str = "us_person"
+    tax_entity_type: str = "individual"
+    business_name: str | None = None
     tax_form_type: str | None = None
     paypal_email: str | None = None
 

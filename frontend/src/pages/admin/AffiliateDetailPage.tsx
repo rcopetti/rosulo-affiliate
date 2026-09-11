@@ -56,6 +56,12 @@ export function AffiliateDetailPage() {
     { label: 'Postal code', value: data.postal_code },
     { label: 'PayPal account', value: data.paypal_email, mono: true },
   ];
+  const taxDetails = [
+    { label: 'Tax status', value: data.tax_status === 'foreign_person' ? 'Foreign person' : 'US person' },
+    { label: 'Payee type', value: data.tax_entity_type === 'business' ? 'Business/entity' : 'Individual' },
+    { label: 'Legal business name', value: data.business_name },
+    { label: 'Required document', value: data.tax_form_type },
+  ];
 
   return (
     <div className="space-y-6">
@@ -95,6 +101,20 @@ export function AffiliateDetailPage() {
             Reject KYC
           </Button>
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tax classification</CardTitle>
+        </CardHeader>
+        <dl className="divide-y divide-line">
+          {taxDetails.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="text-sm text-fg-muted">{row.label}</dt>
+              <dd className="text-sm font-medium text-fg">{row.value?.trim() ? row.value : '—'}</dd>
+            </div>
+          ))}
+        </dl>
       </Card>
 
       <Card>

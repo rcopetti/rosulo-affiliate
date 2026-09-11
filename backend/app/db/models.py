@@ -78,6 +78,8 @@ class AffiliateAccount(Base):
     postal_code = Column(String, nullable=True)
     tax_id = Column(String, nullable=True)
     tax_status = Column(String, nullable=False, default="us_person")
+    tax_entity_type = Column(String, nullable=False, default="individual")
+    business_name = Column(String, nullable=True)
     tax_form_type = Column(String, nullable=True)
     withholding_certificate = Column(String, nullable=True)
     backup_withholding_required = Column(Boolean, default=False)

@@ -13,7 +13,9 @@ export interface AffiliateAccount {
   state?: string | null;
   postal_code?: string | null;
   tax_id?: string | null;
-  tax_status?: 'us_person' | 'non_us_person' | null;
+  tax_status?: 'us_person' | 'foreign_person' | null;
+  tax_entity_type?: 'individual' | 'business' | null;
+  business_name?: string | null;
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
   paypal_email?: string | null;
   backup_withholding_required?: boolean;
@@ -38,6 +40,10 @@ export interface Affiliate {
   state?: string | null;
   postal_code?: string | null;
   paypal_email?: string | null;
+  tax_status?: 'us_person' | 'foreign_person' | null;
+  tax_entity_type?: 'individual' | 'business' | null;
+  business_name?: string | null;
+  tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
   kyc_approved_for_payout: boolean;
   enabled: boolean;
   contract?: Contract;

@@ -34,10 +34,14 @@ export function ProfilePage() {
         <CardHeader>
           <CardTitle>Tax documents</CardTitle>
         </CardHeader>
-        <p className="mb-4 text-sm text-slate-600">
-          Upload the tax form required for your jurisdiction. US persons need a W-9; non-US individuals need a W-8BEN.
+        <p className="mb-4 text-sm text-fg-muted">
+          Your required IRS form is determined by your US/foreign status and whether you are an individual or business. Upload it separately for review.
         </p>
-        <KycUploader onUpload={() => refetch()} />
+        <KycUploader
+          taxStatus={account.tax_status}
+          taxEntityType={account.tax_entity_type}
+          onUpload={() => refetch()}
+        />
       </Card>
     </div>
   );

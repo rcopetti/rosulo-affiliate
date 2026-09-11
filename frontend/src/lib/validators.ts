@@ -16,7 +16,9 @@ export const registerSchema = z.object({
   country: z.string().min(1, 'Country is required'),
   state: z.string().optional(),
   postal_code: z.string().min(1, 'Postal code is required'),
-  tax_status: z.string().optional(),
+  tax_status: z.enum(['us_person', 'foreign_person']).default('us_person'),
+  tax_entity_type: z.enum(['individual', 'business']).default('individual'),
+  business_name: z.string().optional(),
   tax_form_type: z.string().optional(),
   paypal_email: z.string().email('Enter a valid PayPal email').optional().or(z.literal('')),
 });

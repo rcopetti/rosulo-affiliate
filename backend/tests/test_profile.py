@@ -50,4 +50,5 @@ async def test_profile_can_be_saved_without_tax_fields(client: AsyncClient, tena
     assert body["paypal_email"] == "payouts@example.com"
     # Tax fields remain untouched when omitted.
     assert body["tax_status"] == "us_person"
-    assert body["tax_form_type"] is None
+    assert body["tax_entity_type"] == "individual"
+    assert body["tax_form_type"] == "W-9"

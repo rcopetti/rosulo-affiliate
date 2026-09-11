@@ -7,6 +7,8 @@ import { registerAffiliate, listInvites, acceptInvite } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { FormField } from '@/components/ui/FormField';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { registerSchema, RegisterInput } from '@/lib/validators';
 import { useToast } from '@/components/ui/Toast';
@@ -28,6 +30,8 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
@@ -35,8 +39,12 @@ export function RegisterPage() {
       email,
       country: 'US',
       tax_status: 'us_person',
+      tax_entity_type: 'individual',
     },
   });
+
+  const taxStatus = watch('tax_status') || 'us_person';
+  const taxEntityType = watch('tax_entity_type') || 'individual';
 
   const registerMutation = useMutation({
     mutationFn: registerAffiliate,
@@ -147,6 +155,37 @@ export function RegisterPage() {
           <Input label="Country" required {...register('country')} error={errors.country?.message} />
           <Input label="State / province" {...register('state')} error={errors.state?.message} />
           <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Tax status" helperText="Determines the required IRS form.">
+              {(aria) => (
+                <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+                  <Select
+                    value={taxStatus}
+                    onChange={(v) => setValue('tax_status', v as 'us_person' | 'foreign_person')}
+                    options={[
+                      { value: 'us_person', label: 'US person' },
+                      { value: 'foreign_person', label: 'Foreign person' },
+                    ]}
+                  />
+                </div>
+              )}
+            </FormField>
+            <FormField label="Payee type" helperText="Individual or business/entity.">
+              {(aria) => (
+                <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+                  <Select
+                    value={taxEntityType}
+                    onChange={(v) => setValue('tax_entity_type', v as 'individual' | 'business')}
+                    options={[
+                      { value: 'individual', label: 'Individual' },
+                      { value: 'business', label: 'Business/entity' },
+                    ]}
+                  />
+                </div>
+              )}
+            </FormField>
+          </div>
+          {taxEntityType === 'business' && <Input label="Legal business name" {...register('business_name')} />}
           <Input
             label="PayPal account (for payouts)"
             type="email"
