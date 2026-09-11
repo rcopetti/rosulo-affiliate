@@ -1,7 +1,6 @@
 import uuid
 from datetime import date
 
-from fastapi import HTTPException
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,30 +14,33 @@ async def calculate_from_sale_event(
 ) -> Commission | None:
     contract = await get_contract_for_affiliate(db, affiliate.id)
     if not contract:
-        raise HTTPException(status_code=404, detail="No active contract for affiliate")
+        return None
 
+    today = date.today()
     result = await db.execute(
         select(Term).where(
             Term.contract_id == contract.id,
             or_(
                 Term.payment_sequence == event.payment_sequence,
-                Term.sequence_pattern == "*",
+                and_(Term.payment_sequence.is_(None), Term.sequence_pattern == "*"),
             ),
-            or_(
-                Term.effective_to.is_(None),
-                and_(Term.effective_from <= date.today(), Term.effective_to >= date.today()),
+            and_(
+                or_(Term.effective_from.is_(None), Term.effective_from <= today),
+                or_(Term.effective_to.is_(None), Term.effective_to >= today),
             ),
         )
     )
     terms = result.scalars().all()
+
     applicable = None
     for term in terms:
-        if term.payment_sequence is not None and term.payment_sequence == event.payment_sequence:
+        if term.payment_sequence == event.payment_sequence:
             applicable = term
             break
-        if term.sequence_pattern == "*":
+        if term.payment_sequence is None and term.sequence_pattern == "*":
             applicable = term
 
+    # No term covers this payment sequence: the sale stays a merchant record only.
     if not applicable:
         return None
 
