@@ -9,6 +9,7 @@ class AffiliateCreate(BaseModel):
     name: str
     country: str
     state: str | None = None
+    postal_code: str | None = None
     tax_id: str | None = None
     tax_status: str = "us_person"
     tax_form_type: str | None = None
@@ -23,4 +24,8 @@ class AffiliateOut(BaseModel):
     account_id: uuid.UUID = Field(validation_alias="affiliate_account_id")
     email: str
     name: str
+    country: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    paypal_email: str | None = None
     kyc_approved_for_payout: bool

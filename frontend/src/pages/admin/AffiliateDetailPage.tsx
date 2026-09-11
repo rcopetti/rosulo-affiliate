@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
+import { PencilLine } from 'lucide-react';
 import { approveKyc, getAffiliate, rejectKyc } from '@/api/admin/affiliates';
+import { getContract } from '@/api/admin/contracts';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { KycStatusBadge } from '@/components/shared/KycStatusBadge';
 import { useToast } from '@/components/ui/Toast';
+import { formatCurrency } from '@/lib/utils';
 
 export function AffiliateDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +18,12 @@ export function AffiliateDetailPage() {
     queryKey: ['admin-affiliate', id],
     queryFn: () => getAffiliate(id!),
     enabled: !!id,
+  });
+  const { data: contract, isLoading: contractLoading } = useQuery({
+    queryKey: ['admin-contract', id],
+    queryFn: () => getContract(id!),
+    enabled: !!id,
+    retry: false,
   });
 
   const approve = useMutation({
@@ -35,7 +44,18 @@ export function AffiliateDetailPage() {
     onError: () => toast.add({ title: 'Error', description: 'Could not reject KYC', variant: 'error' }),
   });
 
-  if (isLoading || !data) return <p className="text-slate-600">Loading…</p>;
+  if (isLoading || !data) return <p className="text-sm text-fg-muted">Loading…</p>;
+
+  const terms = contract?.terms ?? [];
+
+  const payoutDetails = [
+    { label: 'Email', value: data.email },
+    { label: 'Full name', value: data.name },
+    { label: 'Country', value: data.country },
+    { label: 'State / province', value: data.state },
+    { label: 'Postal code', value: data.postal_code },
+    { label: 'PayPal account', value: data.paypal_email, mono: true },
+  ];
 
   return (
     <div className="space-y-6">
@@ -45,25 +65,87 @@ export function AffiliateDetailPage() {
           { label: data.name },
         ]}
       />
-      <h1 className="text-2xl font-bold text-fg">{data.name}</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-fg">{data.name}</h1>
+        <KycStatusBadge approved={data.kyc_approved_for_payout} />
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Affiliate details</CardTitle>
+          <CardTitle>Payout details</CardTitle>
         </CardHeader>
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">Email: {data.email}</p>
-          <p className="flex items-center gap-2 text-sm text-slate-600">
-            KYC: <KycStatusBadge approved={data.kyc_approved_for_payout} />
-          </p>
-          <div className="flex gap-2">
-            <Button onClick={() => approve.mutate()} isLoading={approve.isPending}>
-              Approve KYC
-            </Button>
-            <Button variant="danger" onClick={() => reject.mutate()} isLoading={reject.isPending}>
-              Reject KYC
-            </Button>
-          </div>
-          <Link to={`/admin/affiliates/${id}/contract`} className="block text-brand-600 hover:underline">
+        <p className="-mt-2 mb-4 text-sm text-fg-muted">
+          Provided by the affiliate. This information is read-only and is used for the payout process.
+        </p>
+        <dl className="divide-y divide-line">
+          {payoutDetails.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="text-sm text-fg-muted">{row.label}</dt>
+              <dd className={row.mono ? 'font-mono text-sm text-fg' : 'text-sm font-medium text-fg'}>
+                {row.value?.trim() ? row.value : '—'}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-4 flex gap-2">
+          <Button onClick={() => approve.mutate()} isLoading={approve.isPending}>
+            Approve KYC
+          </Button>
+          <Button variant="danger" onClick={() => reject.mutate()} isLoading={reject.isPending}>
+            Reject KYC
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          action={
+            <Link to={`/admin/affiliates/${id}/contract`}>
+              <Button variant="secondary" size="sm">
+                <PencilLine className="h-4 w-4" aria-hidden="true" />
+                Edit terms
+              </Button>
+            </Link>
+          }
+        >
+          <CardTitle>Contract terms</CardTitle>
+        </CardHeader>
+        {contractLoading ? (
+          <p className="text-sm text-fg-muted">Loading terms…</p>
+        ) : terms.length === 0 ? (
+          <p className="text-sm text-fg-muted">No terms configured yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-fg-muted">
+                <th scope="col" className="py-2 pr-4 font-semibold">Payment sequence</th>
+                <th scope="col" className="py-2 pr-4 font-semibold">Commission</th>
+                <th scope="col" className="py-2 pr-4 font-semibold">Min. threshold</th>
+                <th scope="col" className="py-2 font-semibold">Effective</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {terms.map((t) => (
+                <tr key={t.id}>
+                  <td className="py-2.5 pr-4">{t.payment_sequence ?? 'Any'}</td>
+                  <td className="py-2.5 pr-4 tabular-nums">{t.commission_percent}%</td>
+                  <td className="py-2.5 pr-4 tabular-nums">
+                    {t.minimum_threshold != null ? formatCurrency(t.minimum_threshold) : '—'}
+                  </td>
+                  <td className="py-2 text-xs text-fg-muted">
+                    {t.effective_from || '—'} → {t.effective_to || 'open'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="mt-4">
+          <Link
+            to={`/admin/affiliates/${id}/contract`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <PencilLine className="h-4 w-4" aria-hidden="true" />
             Edit contract
           </Link>
         </div>

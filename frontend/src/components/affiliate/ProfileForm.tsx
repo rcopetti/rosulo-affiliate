@@ -12,6 +12,7 @@ const schema = z.object({
   name: z.string().min(1, 'Full name is required'),
   country: z.string().min(1, 'Country is required'),
   state: z.string().optional(),
+  postal_code: z.string().min(1, 'Postal code is required'),
   tax_id: z.string().optional(),
   tax_status: z.enum(['us_person', 'non_us_person']),
   tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).optional(),
@@ -38,6 +39,7 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
       name: account.name,
       country: account.country || '',
       state: account.state || '',
+      postal_code: account.postal_code || '',
       tax_id: account.tax_id || '',
       tax_status: account.tax_status || 'us_person',
       tax_form_type: account.tax_form_type,
@@ -51,6 +53,7 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
       <Input label="Full name" required {...register('name')} error={errors.name?.message} />
       <Input label="Country" required {...register('country')} error={errors.country?.message} />
       <Input label="State / province" {...register('state')} error={errors.state?.message} />
+      <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
       <Input label="Tax ID" {...register('tax_id')} error={errors.tax_id?.message} />
       <FormField label="Tax status" error={errors.tax_status?.message} required>
         {(aria) => (

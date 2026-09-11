@@ -11,6 +11,7 @@ export interface AffiliateAccount {
   name: string;
   country?: string;
   state?: string;
+  postal_code?: string;
   tax_id?: string;
   tax_status?: 'us_person' | 'non_us_person';
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E';
@@ -33,6 +34,10 @@ export interface Affiliate {
   tenant_id: string;
   email: string;
   name: string;
+  country?: string;
+  state?: string;
+  postal_code?: string;
+  paypal_email?: string;
   kyc_approved_for_payout: boolean;
   enabled: boolean;
   contract?: Contract;

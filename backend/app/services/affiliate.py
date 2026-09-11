@@ -14,6 +14,10 @@ def _affiliate_out(affiliate: Affiliate) -> dict:
         "affiliate_account_id": affiliate.affiliate_account_id,
         "email": affiliate.account.email,
         "name": affiliate.account.name,
+        "country": affiliate.account.country,
+        "state": affiliate.account.state,
+        "postal_code": affiliate.account.postal_code,
+        "paypal_email": affiliate.account.paypal_email,
         "kyc_approved_for_payout": affiliate.kyc_approved_for_payout,
     }
 

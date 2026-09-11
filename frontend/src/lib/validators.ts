@@ -15,9 +15,10 @@ export const registerSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   country: z.string().min(1, 'Country is required'),
   state: z.string().optional(),
+  postal_code: z.string().min(1, 'Postal code is required'),
   tax_status: z.string().optional(),
   tax_form_type: z.string().optional(),
-  paypal_email: z.string().email().optional().or(z.literal('')),
+  paypal_email: z.string().email('Enter a valid PayPal email').optional().or(z.literal('')),
 });
 
 export const acceptInviteSchema = z.object({

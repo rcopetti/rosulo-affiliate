@@ -146,6 +146,14 @@ export function RegisterPage() {
           <Input label="Full name" required {...register('name')} error={errors.name?.message} />
           <Input label="Country" required {...register('country')} error={errors.country?.message} />
           <Input label="State / province" {...register('state')} error={errors.state?.message} />
+          <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
+          <Input
+            label="PayPal account (for payouts)"
+            type="email"
+            required
+            {...register('paypal_email')}
+            error={errors.paypal_email?.message}
+          />
           <Button type="submit" isLoading={registerMutation.isPending} className="w-full">
             Create account
           </Button>

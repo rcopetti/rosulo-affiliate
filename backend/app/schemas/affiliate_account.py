@@ -8,6 +8,7 @@ class AffiliateAccountBase(BaseModel):
     name: str
     country: str
     state: str | None = None
+    postal_code: str | None = None
     tax_id: str | None = None
     tax_status: str = "us_person"
     tax_form_type: str | None = None
@@ -23,6 +24,7 @@ class AffiliateAccountUpdate(BaseModel):
     name: str | None = None
     country: str | None = None
     state: str | None = None
+    postal_code: str | None = None
     tax_id: str | None = None
     tax_status: str | None = None
     tax_form_type: str | None = None

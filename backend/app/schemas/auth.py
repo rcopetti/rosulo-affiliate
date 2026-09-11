@@ -11,6 +11,7 @@ class AffiliateRegister(BaseModel):
     name: str
     country: str
     state: str | None = None
+    postal_code: str | None = None
     tax_status: str = "us_person"
     tax_form_type: str | None = None
     paypal_email: str | None = None
@@ -38,6 +39,7 @@ class AffiliateAcceptInvite(BaseModel):
     name: str | None = None
     country: str | None = None
     state: str | None = None
+    postal_code: str | None = None
     tax_status: str = "us_person"
     tax_form_type: str | None = None
     paypal_email: str | None = None

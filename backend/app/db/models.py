@@ -75,6 +75,7 @@ class AffiliateAccount(Base):
     name = Column(String, nullable=False)
     country = Column(String, nullable=False)
     state = Column(String, nullable=True)
+    postal_code = Column(String, nullable=True)
     tax_id = Column(String, nullable=True)
     tax_status = Column(String, nullable=False, default="us_person")
     tax_form_type = Column(String, nullable=True)
