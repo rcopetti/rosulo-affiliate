@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { approveKyc, getAffiliate, rejectKyc } from '@/api/admin/affiliates';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { KycStatusBadge } from '@/components/shared/KycStatusBadge';
 import { useToast } from '@/components/ui/Toast';
 
@@ -38,7 +39,13 @@ export function AffiliateDetailPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">{data.name}</h1>
+      <Breadcrumbs
+        items={[
+          { label: 'Affiliates', to: '/admin/affiliates' },
+          { label: data.name },
+        ]}
+      />
+      <h1 className="text-2xl font-bold text-fg">{data.name}</h1>
       <Card>
         <CardHeader>
           <CardTitle>Affiliate details</CardTitle>
