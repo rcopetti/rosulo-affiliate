@@ -8,7 +8,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, helperText, className, id, ...props }, ref) => {
+  ({ label, error, helperText, className, id, required, readOnly, ...props }, ref) => {
     const inputId = id || props.name;
     const describedBy = error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined;
     return (
@@ -16,15 +16,23 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-fg">
             {label}
+            {required && !readOnly && (
+              <span className="ml-0.5 text-danger" aria-hidden="true">
+                *
+              </span>
+            )}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
+          required={required}
+          readOnly={readOnly}
           aria-invalid={!!error || undefined}
           aria-describedby={describedBy}
           className={cn(
             'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors',
+            readOnly && 'cursor-default bg-surface-muted text-fg-muted',
             error && 'border-danger focus:border-danger focus:ring-danger',
             className
           )}

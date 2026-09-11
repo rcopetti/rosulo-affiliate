@@ -14,7 +14,7 @@ const schema = z.object({
   state: z.string().optional(),
   postal_code: z.string().min(1, 'Postal code is required'),
   tax_id: z.string().optional(),
-  tax_status: z.enum(['us_person', 'non_us_person']),
+  tax_status: z.enum(['us_person', 'non_us_person']).optional(),
   tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).optional(),
   paypal_email: z.string().email('Enter a valid PayPal email'),
 });
@@ -48,14 +48,14 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
   });
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       <FormErrorSummary errors={errors} />
       <Input label="Full name" required {...register('name')} error={errors.name?.message} />
       <Input label="Country" required {...register('country')} error={errors.country?.message} />
       <Input label="State / province" {...register('state')} error={errors.state?.message} />
       <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
       <Input label="Tax ID" {...register('tax_id')} error={errors.tax_id?.message} />
-      <FormField label="Tax status" error={errors.tax_status?.message} required>
+      <FormField label="Tax status" error={errors.tax_status?.message} helperText="Optional — needed before KYC approval">
         {(aria) => (
           <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
             <Select
@@ -69,7 +69,13 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
           </div>
         )}
       </FormField>
-      <Input label="PayPal email" type="email" required {...register('paypal_email')} error={errors.paypal_email?.message} />
+      <Input
+        label="PayPal account (for payouts)"
+        type="email"
+        required
+        {...register('paypal_email')}
+        error={errors.paypal_email?.message}
+      />
       <Button type="submit" isLoading={isLoading}>
         Save profile
       </Button>

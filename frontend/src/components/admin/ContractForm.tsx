@@ -26,7 +26,7 @@ export function ContractForm({ terms, onSubmit, isLoading }: ContractFormProps) 
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       {fields.map((field, index) => (
         <div key={field.id} className="grid gap-2 rounded-lg border border-line bg-surface p-4 sm:grid-cols-4">
           <input type="hidden" {...register(`terms.${index}.id`)} defaultValue={field.id} />
