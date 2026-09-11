@@ -119,6 +119,13 @@ export interface Event {
   occurred_at: string;
 }
 
+export interface PaginatedEvents {
+  items: Event[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
 export interface Dashboard {
   lead_volume: { bucket: string; count: number }[];
   sales_by_sequence: { sequence: number; count: number; amount: number }[];

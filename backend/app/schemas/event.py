@@ -41,3 +41,10 @@ class EventOut(BaseModel):
     referer: str | None = None
     page_url: str | None = None
     occurred_at: datetime | None = None
+
+
+class PaginatedEvents(BaseModel):
+    items: list[EventOut]
+    total: int
+    skip: int
+    limit: int
