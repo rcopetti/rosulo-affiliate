@@ -16,16 +16,16 @@ export function Pagination({ skip, limit, total, onSkipChange, onLimitChange }: 
 
   return (
     <div className="flex flex-col items-center justify-between gap-2 px-4 py-3 sm:flex-row">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-fg-muted">
         Showing {Math.min(skip + 1, total)}-{Math.min(skip + limit, total)} of {total}
       </p>
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-fg-muted">
           Per page
           <select
             value={limit}
             onChange={(e) => onLimitChange(Number(e.target.value))}
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700 focus:border-brand-500 focus:outline-none"
+            className="cursor-pointer rounded-lg border border-line bg-surface px-2 py-1 text-sm text-fg focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value={5}>5</option>
             <option value={10}>10</option>
@@ -43,7 +43,7 @@ export function Pagination({ skip, limit, total, onSkipChange, onLimitChange }: 
           >
             Previous
           </Button>
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-fg-muted">
             Page {currentPage} of {totalPages}
           </span>
           <Button

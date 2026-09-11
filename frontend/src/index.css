@@ -1,30 +1,71 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-bg: 248 250 252;
+    --color-surface: 255 255 255;
+    --color-surface-muted: 241 245 249;
+    --color-fg: 15 23 42;
+    --color-fg-muted: 100 116 139;
+    --color-fg-subtle: 148 163 184;
+    --color-border: 226 232 240;
+    --color-primary: 2 132 199;
+    --color-primary-hover: 3 105 161;
+    --color-primary-fg: 255 255 255;
+    --color-success: 16 185 129;
+    --color-success-soft: 209 250 229;
+    --color-success-fg: 6 95 70;
+    --color-warning: 245 158 11;
+    --color-warning-soft: 254 243 199;
+    --color-warning-fg: 146 64 14;
+    --color-danger: 239 68 68;
+    --color-danger-soft: 254 226 226;
+    --color-danger-fg: 153 27 27;
+    --color-info: 59 130 246;
+    --color-info-soft: 219 234 254;
+    --color-info-fg: 30 58 138;
+  }
+
+  .dark {
+    --color-bg: 2 6 23;
+    --color-surface: 15 23 42;
+    --color-surface-muted: 30 41 59;
+    --color-fg: 248 250 252;
+    --color-fg-muted: 148 163 184;
+    --color-fg-subtle: 100 116 139;
+    --color-border: 51 65 85;
+    --color-primary: 2 132 199;
+    --color-primary-hover: 14 165 233;
+    --color-primary-fg: 255 255 255;
+    --color-success: 16 185 129;
+    --color-success-soft: 6 78 59;
+    --color-success-fg: 110 231 183;
+    --color-warning: 245 158 11;
+    --color-warning-soft: 120 53 15;
+    --color-warning-fg: 252 211 77;
+    --color-danger: 239 68 68;
+    --color-danger-soft: 127 29 29;
+    --color-danger-fg: 252 165 165;
+    --color-info: 59 130 246;
+    --color-info-soft: 30 58 138;
+    --color-info-fg: 147 197 253;
+  }
+
   html {
     @apply antialiased;
   }
-  body {
-    @apply bg-slate-50 text-slate-900 font-sans;
-  }
-}
 
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  body {
+    @apply bg-bg text-fg font-sans;
   }
-  .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500;
-  }
-  .btn-secondary {
-    @apply btn bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-slate-500;
-  }
-  .input {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none;
-  }
-  .label {
-    @apply block text-sm font-medium text-slate-700 mb-1;
+
+  ::selection {
+    @apply bg-brand-200 text-brand-900;
   }
 }

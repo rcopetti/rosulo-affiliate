@@ -1,6 +1,8 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, CreditCard, Activity, Key, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { Button } from '@/components/ui/Button';
 
 const nav = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -20,40 +22,43 @@ export function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <Link to="/admin/dashboard" className="text-xl font-bold text-brand-700">
+    <div className="min-h-screen bg-bg">
+      <header className="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+          <Link to="/admin/dashboard" className="flex items-center gap-2 text-lg font-bold text-primary">
+            <img src="/logo.svg" alt="" className="h-6 w-6" aria-hidden="true" />
             Rosulo Admin
           </Link>
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900"
-          >
-            <LogOut className="h-4 w-4" />
-            Log out
-          </button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              Log out
+            </Button>
+          </div>
         </div>
       </header>
       <div className="mx-auto flex max-w-7xl gap-6 p-4 lg:p-8">
-        <nav className="hidden w-56 shrink-0 flex-col gap-1 md:flex">
+        <nav className="hidden w-56 shrink-0 flex-col gap-1 md:flex" aria-label="Admin navigation">
           {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium',
-                  isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100'
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-brand-50 text-brand-700 dark:bg-primary/10 dark:text-brand-300'
+                    : 'text-fg-muted hover:bg-surface-muted hover:text-fg'
                 )
               }
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="h-4 w-4" aria-hidden="true" />
               {item.label}
             </NavLink>
           ))}
         </nav>
-        <main className="flex-1">
+        <main className="min-w-0 flex-1">
           <Outlet />
         </main>
       </div>

@@ -1,36 +1,62 @@
 import { Event } from '@/api/types';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
+import { DataTable, Column } from '@/components/ui/DataTable';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
+const columns: Column<Event>[] = [
+  {
+    key: 'event_id',
+    header: 'Event ID',
+    render: (e) => <span className="font-mono text-xs">{e.event_id}</span>,
+    className: 'truncate font-mono text-xs',
+    headerClassName: 'w-40',
+  },
+  {
+    key: 'occurred_at',
+    header: 'Time',
+    render: (e) => <span className="whitespace-nowrap text-xs">{formatDateTime(e.occurred_at)}</span>,
+    sortValue: (e) => new Date(e.occurred_at).getTime(),
+    headerClassName: 'w-48',
+  },
+  {
+    key: 'type',
+    header: 'Type',
+    render: (e) => <span className="whitespace-nowrap text-xs capitalize">{e.type}</span>,
+    sortValue: (e) => e.type,
+    headerClassName: 'w-16',
+  },
+  {
+    key: 'campaign_id',
+    header: 'Campaign',
+    render: (e) => <span className="truncate font-mono text-xs">{e.campaign_id || '-'}</span>,
+    className: 'max-w-0 w-full',
+    headerClassName: 'w-40',
+  },
+  {
+    key: 'affiliate_id',
+    header: 'Affiliate',
+    render: (e) => <span className="truncate font-mono text-xs">{e.affiliate_id || '-'}</span>,
+    headerClassName: 'w-40',
+  },
+  {
+    key: 'customer_id',
+    header: 'Customer',
+    render: (e) => <span className="truncate text-xs">{e.customer_id || '-'}</span>,
+    headerClassName: 'w-40',
+  },
+  {
+    key: 'amount',
+    header: 'Amount',
+    render: (e) => (
+      <span className="whitespace-nowrap text-xs">
+        {e.amount ? formatCurrency(e.amount, e.currency || 'USD') : '-'}
+      </span>
+    ),
+    sortValue: (e) => e.amount || 0,
+    headerClassName: 'w-24 text-right',
+    className: 'text-right',
+  },
+];
+
 export function EventsTable({ events }: { events: Event[] }) {
-  return (
-    <Table className="w-full table-fixed">
-      <TableHead>
-        <TableRow>
-          <TableHeader className="w-40">Event ID</TableHeader>
-          <TableHeader className="w-48">Time</TableHeader>
-          <TableHeader className="w-16">Type</TableHeader>
-          <TableHeader className="w-40">Campaign</TableHeader>
-          <TableHeader className="w-40">Affiliate</TableHeader>
-          <TableHeader className="w-40">Customer</TableHeader>
-          <TableHeader className="w-24 text-right">Amount</TableHeader>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {events.map((e) => (
-          <TableRow key={e.id}>
-            <TableCell className="truncate font-mono text-xs">{e.event_id}</TableCell>
-            <TableCell className="whitespace-nowrap overflow-hidden text-xs">{formatDateTime(e.occurred_at)}</TableCell>
-            <TableCell className="whitespace-nowrap text-xs capitalize">{e.type}</TableCell>
-            <TableCell className="truncate font-mono text-xs">{e.campaign_id || '-'}</TableCell>
-            <TableCell className="truncate font-mono text-xs">{e.affiliate_id || '-'}</TableCell>
-            <TableCell className="truncate text-xs">{e.customer_id || '-'}</TableCell>
-            <TableCell className="whitespace-nowrap text-right text-xs">
-              {e.amount ? formatCurrency(e.amount, e.currency || 'USD') : '-'}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+  return <DataTable columns={columns} data={events} rowKey={(e) => e.id} emptyTitle="No events yet" />;
 }

@@ -19,28 +19,28 @@ interface SelectProps {
 export function Select({ value, onChange, options, placeholder, label, className }: SelectProps) {
   return (
     <div className={cn('w-full', className)}>
-      {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+      {label && <label className="mb-1 block text-sm font-medium text-fg">{label}</label>}
       <SelectPrimitive.Root value={value} onValueChange={onChange}>
         <SelectPrimitive.Trigger
-          className="inline-flex w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none"
+          className="inline-flex w-full cursor-pointer items-center justify-between rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
           aria-label={label || 'Select'}
         >
           <SelectPrimitive.Value placeholder={placeholder} />
           <SelectPrimitive.Icon>
-            <ChevronDown className="h-4 w-4 text-slate-500" />
+            <ChevronDown className="h-4 w-4 text-fg-muted" aria-hidden="true" />
           </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
         <SelectPrimitive.Portal>
           <SelectPrimitive.Content
             position="popper"
-            className="z-50 min-w-[8rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+            className="z-50 min-w-[8rem] overflow-hidden rounded-lg border border-line bg-surface shadow-lg"
           >
             <SelectPrimitive.Viewport className="p-1">
               {options.map((o) => (
                 <SelectPrimitive.Item
                   key={o.value}
                   value={o.value}
-                  className="cursor-pointer rounded px-2 py-1.5 text-sm text-slate-700 outline-none hover:bg-slate-100 focus:bg-slate-100 data-[state=checked]:bg-slate-100"
+                  className="cursor-pointer rounded px-2 py-1.5 text-sm text-fg outline-none hover:bg-surface-muted focus:bg-surface-muted data-[state=checked]:bg-surface-muted"
                 >
                   <SelectPrimitive.ItemText>{o.label}</SelectPrimitive.ItemText>
                 </SelectPrimitive.Item>

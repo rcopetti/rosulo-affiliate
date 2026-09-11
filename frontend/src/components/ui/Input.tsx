@@ -4,23 +4,41 @@ import { forwardRef, InputHTMLAttributes } from 'react';
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  helperText?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, ...props }, ref) => {
+  ({ label, error, helperText, className, id, ...props }, ref) => {
+    const inputId = id || props.name;
+    const describedBy = error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined;
     return (
       <div className="w-full">
-        {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+        {label && (
+          <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-fg">
+            {label}
+          </label>
+        )}
         <input
           ref={ref}
+          id={inputId}
+          aria-invalid={!!error || undefined}
+          aria-describedby={describedBy}
           className={cn(
-            'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none',
+            'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors',
             error && 'border-danger focus:border-danger focus:ring-danger',
             className
           )}
           {...props}
         />
-        {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+        {error ? (
+          <p id={`${inputId}-error`} className="mt-1 text-xs text-danger" role="alert">
+            {error}
+          </p>
+        ) : helperText ? (
+          <p id={`${inputId}-helper`} className="mt-1 text-xs text-fg-muted">
+            {helperText}
+          </p>
+        ) : null}
       </div>
     );
   }
