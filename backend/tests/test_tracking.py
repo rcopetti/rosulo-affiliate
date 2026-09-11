@@ -5,24 +5,13 @@ from app.db.models import Tenant
 
 
 @pytest.mark.asyncio
-async def test_public_track_click(
-    client: AsyncClient, tenant: Tenant, tenant_user
-):
-    # Admin login
+async def test_click_tracking_flow(client: AsyncClient, tenant: Tenant, tenant_user):
     admin_login = await client.post(
         "/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
-    # Configure allowed domain
-    await client.put(
-        "/v1/admin/integration/allowed-domains",
-        headers={"Authorization": f"Bearer {admin_token}"},
-        json={"allowed_domains": ["allbum.me", "*.allbum.me"]},
-    )
-
-    # Create affiliate and campaign
     invite = await client.post(
         "/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -51,34 +40,48 @@ async def test_public_track_click(
     assert campaign.status_code == 200
     tracking_code = campaign.json()["tracking_code"]
 
-    # Track a click from an allowed origin
-    r = await client.post(
-        "/v1/tracking/track-click",
-        headers={
-            "Origin": "https://allbum.me",
-            "User-Agent": "Mozilla/5.0",
-        },
+    # Click event via API key using the tracking_code
+    click = await client.post(
+        "/v1/events",
+        headers={"X-API-Key": "test-api-key"},
         json={
+            "event_id": "click-001",
+            "type": "click",
             "tracking_code": tracking_code,
             "referer": "https://example.com",
-            "page_url": "https://allbum.me/landing?rc=" + tracking_code,
+            "page_url": "https://allbum.me/landing",
         },
     )
-    assert r.status_code == 200
-    data = r.json()
-    assert data["campaign_id"]
-    assert data["click_id"]
+    assert click.status_code == 200
+    click_id = click.json()["id"]
 
-    # Invalid origin should be rejected
-    bad = await client.post(
-        "/v1/tracking/track-click",
-        headers={
-            "Origin": "https://evil.com",
-            "User-Agent": "Mozilla/5.0",
-        },
+    # Lead event using click_id
+    lead = await client.post(
+        "/v1/events",
+        headers={"X-API-Key": "test-api-key"},
         json={
-            "tracking_code": tracking_code,
-            "page_url": "https://evil.com",
+            "event_id": "lead-001",
+            "type": "lead",
+            "click_id": click_id,
+            "customer_id": "user-123",
+            "customer_email": "jo***e@example.com",
         },
     )
-    assert bad.status_code == 403
+    assert lead.status_code == 200
+    lead_id = lead.json()["id"]
+
+    # Sale event using lead_id
+    sale = await client.post(
+        "/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "event_id": "sale-001",
+            "type": "sale",
+            "lead_id": lead_id,
+            "amount": 100.0,
+            "currency": "USD",
+            "payment_sequence": 1,
+        },
+    )
+    assert sale.status_code == 200
+    assert sale.json()["type"] == "sale"

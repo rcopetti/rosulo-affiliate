@@ -15,7 +15,6 @@ from app.api.v1.affiliate import profile as affiliate_profile
 from app.api.v1.auth import affiliate as auth_affiliate
 from app.api.v1.auth import tenant as auth_tenant
 from app.api.v1.public import events as public_events
-from app.api.v1.public import tracking as public_tracking
 from app.api.v1.public import webhooks as public_webhooks
 
 router = APIRouter()
@@ -35,5 +34,4 @@ router.include_router(affiliate_balance.router, prefix="/affiliate", tags=["affi
 router.include_router(affiliate_payouts.router, prefix="/affiliate", tags=["affiliate-payouts"])
 router.include_router(affiliate_dashboard.router, prefix="/affiliate/dashboard", tags=["affiliate-dashboard"])
 router.include_router(public_events.router, prefix="/events", tags=["events"])
-router.include_router(public_tracking.router, prefix="/tracking", tags=["tracking"])
 router.include_router(public_webhooks.router, prefix="/webhooks", tags=["webhooks"])

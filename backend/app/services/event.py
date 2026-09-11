@@ -55,13 +55,26 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         affiliate_id = campaign.affiliate_id
         campaign_id = campaign.id
 
+    elif data.tracking_code:
+        campaign_result = await db.execute(
+            select(Campaign).where(
+                Campaign.tracking_code == data.tracking_code,
+                Campaign.tenant_id == tenant.id,
+            )
+        )
+        campaign = campaign_result.scalar_one_or_none()
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        affiliate_id = campaign.affiliate_id
+        campaign_id = campaign.id
+
     # Type-specific validation.
     if data.type == "click" and not campaign_id:
-        raise HTTPException(status_code=400, detail="click requires campaign_id")
+        raise HTTPException(status_code=400, detail="click requires campaign_id or tracking_code")
     if data.type == "lead" and not campaign_id:
-        raise HTTPException(status_code=400, detail="lead requires click_id or campaign_id")
+        raise HTTPException(status_code=400, detail="lead requires click_id, campaign_id, or tracking_code")
     if data.type == "sale" and not campaign_id:
-        raise HTTPException(status_code=400, detail="sale requires lead_id, click_id, or campaign_id")
+        raise HTTPException(status_code=400, detail="sale requires lead_id, click_id, campaign_id, or tracking_code")
 
     event = Event(
         event_id=data.event_id,

@@ -8,6 +8,7 @@ class EventCreate(BaseModel):
     event_id: str
     type: str = Field(..., pattern="^(click|lead|sale)$")
     campaign_id: str | None = None
+    tracking_code: str | None = None
     click_id: str | None = None
     lead_id: str | None = None
     customer_id: str | None = None
