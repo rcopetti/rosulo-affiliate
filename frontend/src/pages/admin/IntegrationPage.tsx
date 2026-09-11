@@ -79,7 +79,7 @@ export function IntegrationPage() {
     if (!code) return;
     const page = location.href;
     const ref = document.referrer || '';
-    fetch(window.location.origin + '/rosulo/track-click', {
+    fetch(window.location.origin + '/api/v1/tracking/track-click', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -106,14 +106,14 @@ export function IntegrationPage() {
 Context:
 - This website domain: ${domains.join(', ') || '[add allowed domains above]'}
 - Rosulo Affiliate API base: ${apiBase}
-- Public click endpoint on the website backend: POST <your-backend-domain>/rosulo/track-click
+- Tenant public click endpoint (called from the browser): POST <your-backend-domain>/api/v1/tracking/track-click
 - Rosulo public click endpoint (called by the backend, not the browser): POST ${apiBase}/tracking/track-click
 - Affiliate landing links have this format: https://<domain>/?rc=<TRACKING_CODE>
 
 Please provide:
 1. A JavaScript snippet to include in the <head> of every landing page that:
    - Returns immediately if the URL does not contain a ?rc query parameter.
-   - If ?rc is present, sends { tracking_code, referer, page_url } to the website's own backend endpoint (e.g. /rosulo/track-click).
+   - If ?rc is present, sends { tracking_code, referer, page_url } to the website's own backend endpoint /api/v1/tracking/track-click.
    - The website backend should then forward the request to ${apiBase}/tracking/track-click, passing the original Origin/Referer headers from the browser so the Rosulo allowlist check passes.
    - The backend returns the Rosulo response to the browser.
    - Sets a first-party cookie named "rosulo_click_id" with the returned click_id using:
@@ -146,14 +146,14 @@ Please provide:
 - Optional tenant header: X-Tenant-Id: ${tenantId}
 - Rosulo events endpoint (called from your backend): POST ${apiBase}/events
 - Rosulo public click endpoint (called from your backend): POST ${apiBase}/tracking/track-click
-- Tenant public click endpoint (called from the browser): POST <your-backend-domain>/rosulo/track-click
+- Tenant public click endpoint (called from the browser): POST <your-backend-domain>/api/v1/tracking/track-click
 - Allowed domains: ${domains.join(', ') || '[add allowed domains above]'}
 
 ## 1. Frontend click tracking
 Add a JavaScript snippet in the <head> of every landing page:
 - Read the ?rc=<TRACKING_CODE> query parameter.
 - If ?rc is missing, do nothing.
-- If ?rc is present, POST to your own backend endpoint (e.g. /rosulo/track-click or https://<your-backend-domain>/rosulo/track-click) with JSON body { tracking_code, referer, page_url }.
+- If ?rc is present, POST to your own backend endpoint /api/v1/tracking/track-click (or https://<your-backend-domain>/api/v1/tracking/track-click) with JSON body { tracking_code, referer, page_url }.
 - Your backend should forward the request to ${apiBase}/tracking/track-click, preserving the browser's Origin/Referer headers so the Rosulo allowlist check passes.
 - Your backend returns the Rosulo response { click_id, campaign_id } to the browser.
 - Set a first-party cookie named "rosulo_click_id" with the returned click_id, using:
@@ -302,7 +302,7 @@ Please output a complete, copy-paste-ready implementation: the frontend snippet,
                 content: (
                   <div className="space-y-4">
                     <p className="text-sm text-slate-600">
-                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and sends the tracking data to your own backend endpoint <code>/rosulo/track-click</code>. Your backend should forward it to <code>${apiBase}/tracking/track-click</code> and return the <code>click_id</code>. The snippet stores the <code>click_id</code> in a first-party cookie named <code>rosulo_click_id</code> so lead and sale handlers can attribute conversions. The Rosulo API key is not exposed in the browser.
+                      Paste this in the <code>&lt;head&gt;</code> of your landing pages. It runs only when the URL has a <code>?rc=</code> query parameter and sends the tracking data to your own backend endpoint <code>/api/v1/tracking/track-click</code>. Your backend should forward it to <code>${apiBase}/tracking/track-click</code> and return the <code>click_id</code>. The snippet stores the <code>click_id</code> in a first-party cookie named <code>rosulo_click_id</code> so lead and sale handlers can attribute conversions. The Rosulo API key is not exposed in the browser.
                     </p>
                     <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-50">
                       <code>{trackingSnippet}</code>
