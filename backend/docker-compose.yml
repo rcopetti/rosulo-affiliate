@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: rosulo
+      POSTGRES_PASSWORD: rosulo
+      POSTGRES_DB: rosulo_affiliate
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rosulo -d rosulo_affiliate"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rosulo:rosulo@postgres:5432/rosulo_affiliate
+      SECRET_KEY: ${SECRET_KEY:-dev-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy

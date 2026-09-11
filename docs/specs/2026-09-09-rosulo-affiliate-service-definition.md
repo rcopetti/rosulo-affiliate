@@ -1,8 +1,8 @@
 # Rosulo Affiliate Service — Service Definition
 
-**Version:** 0.9  
+**Version:** 0.10  
 **Date:** 2026-09-09  
-**Status:** Approved — updated for multi-merchant affiliate accounts  
+**Status:** Draft — updated for tenant users and affiliate invitations  
 **Audience:** Engineering, Product, allbum.me integration team, future SaaS customers
 
 ---
@@ -18,7 +18,9 @@ The service tracks campaign-driven click, lead, and sale events; computes affili
 ## 2. In Scope (v1)
 
 - Multi-tenant merchant (tenant) onboarding and data isolation.
-- Global affiliate account that can be linked to one or more merchants/tenants.
+- Tenant user accounts (email/password login) that can manage one tenant account.
+- API key management per tenant for server-to-server integrations (events and webhooks).
+- Affiliate accounts are created only by accepting a tenant invitation; a global account can be linked to multiple tenants over time.
 - Per-tenant affiliate record with its own contract, campaigns, commissions, and payouts.
 - Affiliate approval workflow, including a hard gate before the first payout.
 - One contract per affiliate, managed by the tenant, defining commission terms by payment sequence.
@@ -49,8 +51,9 @@ The service tracks campaign-driven click, lead, and sale events; computes affili
 
 | Actor | Description |
 |-------|-------------|
-| **Tenant / Merchant** | A business running an affiliate program, e.g. allbum.me or a SaaS customer. Creates affiliates and defines their contracts. |
-| **Affiliate / Partner** | A person or business that can promote one or more tenants. Has a global account and a per-tenant record for each merchant. Creates campaigns and requests payouts within the selected tenant. |
+| **Tenant / Merchant** | A business account running an affiliate program, e.g. allbum.me. Owns API keys, integrations, affiliates, and payout decisions. |
+| **Tenant User** | A person at the merchant (admin) who logs in to manage the tenant account, invite affiliates, approve documents, manage contracts, and approve payouts. |
+| **Affiliate / Partner** | A person or business invited by a tenant to promote its products. Creates a global account when accepting an invitation, and can later be invited by other tenants. Creates campaigns and requests payouts within the selected tenant. |
 | **Platform Admin** | Rosulo operations staff who manage tenants, global settings, and compliance. |
 | **End Customer** | The customer who clicks a campaign, registers, or pays. Not a direct user of the service. |
 | **PayPal** | The payment rail used to move funds from the tenant to the affiliate. |
@@ -72,7 +75,45 @@ The service tracks campaign-driven click, lead, and sale events; computes affili
 ### 5.2 Core Entities
 
 ```
-AffiliateAccount (global identity)
+Tenant
+├── name
+├── api_key_hash
+├── TenantUser[]
+│   ├── email
+│   ├── password_hash
+│   ├── name
+│   └── role: admin | manager
+├── AffiliateInvite[]
+│   ├── email
+│   ├── token
+│   ├── contract_terms
+│   ├── status: pending | accepted | expired
+│   └── expires_at
+├── Affiliate[]
+├── Event[]
+├── PaymentRecord[]
+└── Payout[]
+
+TenantUser
+├── tenant_id
+├── email
+├── password_hash
+├── name
+└── role: admin | manager
+
+AffiliateInvite (created by a tenant for an affiliate email)
+├── tenant_id
+├── email
+├── token
+├── contract_terms
+├── status: pending | accepted | expired
+└── expires_at
+
+An invite has two outcomes depending on whether the email already has an `AffiliateAccount`:
+- **Registration invite:** creates a new `AffiliateAccount` and a per-tenant `Affiliate` on acceptance.
+- **Association invite:** creates only a per-tenant `Affiliate` linked to the existing `AffiliateAccount` on acceptance.
+
+AffiliateAccount (created when an affiliate accepts an invitation)
 ├── email
 ├── password_hash
 ├── name
@@ -84,7 +125,7 @@ AffiliateAccount (global identity)
 ├── documents[]
 ├── paypal_email
 ├── backup_withholding_required
-└── Affiliate[] (one per tenant)
+└── Affiliate[] (one per tenant the account was invited to)
     ├── affiliate_account_id
     ├── tenant_id
     ├── kyc_approved_for_payout
@@ -100,12 +141,6 @@ AffiliateAccount (global identity)
     │   └── affiliate_id
     ├── Commission[]
     └── Payout[]
-
-Tenant
-├── Affiliate[]
-├── Event[]
-├── PaymentRecord[]
-└── Payout[]
 
 Event
 ├── type: click | lead | sale
@@ -403,11 +438,13 @@ Before an affiliate can request or receive a payout from a tenant, the affiliate
 
 ## 13. API Surface (v1 Draft)
 
-All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped authentication (API key or OAuth 2.0).
+All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped authentication.
 
-- `/v1/admin/*` endpoints are for **tenant** admins. Payout approval and rejection are tenant business decisions; the platform does not approve or reject payouts.
+- `/v1/auth/tenant/login` returns a tenant-scoped JWT for a `TenantUser`.
+- `/v1/admin/*` endpoints are for authenticated tenant users. The `TenantUser` belongs to exactly one tenant; the JWT carries the tenant id.
 - `/v1/affiliate/*` endpoints are for the authenticated affiliate account. The affiliate account id is taken from the JWT. All affiliate-scoped endpoints require a `X-Tenant-Id` header that selects the active merchant/tenant; the service resolves the per-tenant `affiliate_id` from the account + tenant. No `:id` path parameter is exposed for affiliate-scoped endpoints, preventing cross-affiliate and cross-tenant access.
-- Webhooks are unauthenticated or verified with a per-webhook shared secret.
+- `POST /v1/events` and inbound webhooks use a tenant API key (server-to-server integration authentication).
+- Webhooks are verified with a per-webhook shared secret or signature where applicable.
 
 ### Events
 
@@ -416,19 +453,31 @@ All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped aut
 
 ### Auth
 
-- `POST /v1/auth/affiliate/login` — authenticate affiliate account, returns JWT.
-- `POST /v1/auth/affiliate/register` — create global affiliate account.
+- `POST /v1/auth/tenant/login` — tenant user login with email/password, returns a tenant-scoped JWT.
+- `POST /v1/auth/affiliate/login` — affiliate login, returns JWT.
+- `POST /v1/auth/affiliate/accept-invite` — affiliate accepts an invite token.
+  - If the email has no `AffiliateAccount`, the payload must include `email`, `password`, `name`, `country`, and `token`; the account is created and linked to the tenant.
+  - If the email already has an `AffiliateAccount`, the payload must include `email` and `token`; a new per-tenant `Affiliate` is created and linked.
 
 ### Affiliate — Tenant Selection
 
 - `GET /v1/affiliate/merchants` — list tenants the affiliate account is linked to.
-- `POST /v1/affiliate/merchants/:tenant_id/join` — request to join a tenant (or accept an invite).
 - `POST /v1/affiliate/merchants/:tenant_id/select` — set the active tenant for the session (also sent as `X-Tenant-Id`).
+
+### Admin — Tenant & API Keys
+
+- `GET /v1/admin/tenant` — get tenant profile.
+- `POST /v1/admin/api-keys` — create a new API key for integration.
+- `GET /v1/admin/api-keys` — list API keys (metadata only).
+- `DELETE /v1/admin/api-keys/:id` — revoke an API key.
 
 ### Admin — Affiliates
 
-- `POST /v1/admin/affiliates` — create a global affiliate account and a per-tenant record with contract terms.
-- `GET /v1/admin/affiliates` — list affiliates for a tenant.
+- `POST /v1/admin/affiliates` — create an `AffiliateInvite` for an email with contract terms.
+  - If no `AffiliateAccount` exists for the email: the invite is a registration invite; on acceptance the account is created and linked to the tenant.
+  - If an `AffiliateAccount` already exists for the email: the invite is an association invite; on acceptance a new `Affiliate` record links the existing account to the tenant.
+  - The platform sends an email with a tokenized invite link; the actual email dispatch may be a logging stub in v1.
+- `GET /v1/admin/affiliates` — list accepted affiliates and pending invites for a tenant.
 - `GET /v1/admin/affiliates/:id` — get affiliate profile.
 - `PATCH /v1/admin/affiliates/:id` — update affiliate.
 - `POST /v1/admin/affiliates/:id/documents/approve` — approve a business form.
@@ -547,19 +596,20 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 
 ## 18. Acceptance Criteria (v1)
 
-1. A tenant can create a global affiliate account and a per-tenant affiliate record with its contract terms.
-2. An affiliate can create one or more campaigns.
-3. The service can ingest `click`, `lead`, and `sale` events and attribute them to a campaign.
-4. Every `click` event records the `referer` and `page_url`.
-5. The service calculates commissions from the affiliate's contract, not per campaign.
-6. The service applies the correct withholding rate for each affiliate (US person 0% or 24% backup withholding; non-US person 30% or treaty rate) and records gross, withholding, and net amounts.
-7. The service calculates commissions only for payment sequences covered by a term.
-8. A sale event with a `good_date` and no `payment_record_id` is not available for payout.
-9. An affiliate cannot request a payout until KYC documents are approved.
-10. An affiliate can request a payout; a tenant can approve it and trigger PayPal payment.
-11. The affiliate dashboard shows lead volume by day/hour and sales grouped by sequence, with optional campaign filter.
-12. The tenant dashboard shows campaign performance, affiliate status, commission liability, and payout request queue.
-13. An affiliate can log in, list linked merchants, select a merchant, and interact with each merchant's data using `X-Tenant-Id`.
+1. A tenant user can log in with email/password and manage their tenant account, including API keys.
+2. A tenant can create an affiliate invite for an email with contract terms; accepting the invite creates a new affiliate account when needed, or links an existing account, and creates the per-tenant affiliate record.
+3. An affiliate can create one or more campaigns.
+4. The service can ingest `click`, `lead`, and `sale` events and attribute them to a campaign.
+5. Every `click` event records the `referer` and `page_url`.
+6. The service calculates commissions from the affiliate's contract, not per campaign.
+7. The service applies the correct withholding rate for each affiliate (US person 0% or 24% backup withholding; non-US person 30% or treaty rate) and records gross, withholding, and net amounts.
+8. The service calculates commissions only for payment sequences covered by a term.
+9. A sale event with a `good_date` and no `payment_record_id` is not available for payout.
+10. An affiliate cannot request a payout until KYC documents are approved.
+11. An affiliate can request a payout; a tenant can approve it and trigger PayPal payment.
+12. The affiliate dashboard shows lead volume by day/hour and sales grouped by sequence, with optional campaign filter.
+13. The tenant dashboard shows campaign performance, affiliate status, commission liability, and payout request queue.
+14. An affiliate can log in, list linked merchants, select a merchant, and interact with each merchant's data using `X-Tenant-Id`.
 
 ---
 
@@ -574,9 +624,11 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 | **Coming Revenue** | A tracked sale that is expected but not yet confirmed by a payment record. |
 | **Term** | A rule that maps a payment sequence to a commission percentage. |
 | **Contract** | The set of terms that belong to one affiliate. |
-| **Affiliate Account** | The global identity (login, profile, documents, tax info) shared across all tenants. |
+| **Affiliate Account** | The global identity (login, profile, documents, tax info) created when an affiliate accepts a tenant invitation. It can be linked to multiple tenants over time. |
+| **Affiliate Invite** | A token/link created by a tenant that lets an affiliate register an account and be linked to that tenant. |
 | **Affiliate** | The per-tenant record that links an affiliate account to a merchant, with its own contract, campaigns, commissions, and payouts. |
-| **Tenant** | A merchant using the affiliate platform. |
+| **Tenant** | A merchant account using the affiliate platform. |
+| **Tenant User** | A person at the merchant who logs in to manage the tenant account. |
 
 ---
 
