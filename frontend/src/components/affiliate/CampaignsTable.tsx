@@ -69,7 +69,7 @@ const columns: Column<Campaign>[] = [
       </div>
     ),
     className: 'max-w-0 w-full',
-    headerClassName: 'w-72',
+    headerClassName: 'w-35',
   },
   {
     key: 'created_at',
