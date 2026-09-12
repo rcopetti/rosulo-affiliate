@@ -103,9 +103,10 @@ export function PdfViewer({ url, title = 'PDF preview', className }: PdfViewerPr
           </Button>
         </div>
       </div>
-      <div ref={containerRef} className="relative max-h-[32rem] overflow-auto bg-slate-700/70 p-4" aria-label={title}>
-        {loading && <div className="flex h-48 items-center justify-center gap-2 text-sm text-white"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Loading PDF…</div>}
-        {error && <p className="p-8 text-center text-sm text-danger-fg">{error}</p>}
+      <div className="relative max-h-[32rem] overflow-auto bg-slate-700/70 p-4" aria-label={title}>
+        <div ref={containerRef} />
+        {loading && <div className="absolute inset-0 flex h-48 items-center justify-center gap-2 text-sm text-white"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Loading PDF…</div>}
+        {error && <p className="absolute inset-0 p-8 text-center text-sm text-danger-fg">{error}</p>}
       </div>
     </div>
   );
