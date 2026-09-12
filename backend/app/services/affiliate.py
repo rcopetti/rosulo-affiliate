@@ -22,7 +22,16 @@ def _affiliate_out(affiliate: Affiliate) -> dict:
         "tax_entity_type": affiliate.account.tax_entity_type,
         "business_name": affiliate.account.business_name,
         "tax_form_type": affiliate.account.tax_form_type,
-        "documents": affiliate.account.documents,
+        "documents": [
+            {
+                "id": document.id,
+                "document_type": document.document_type,
+                "content_type": document.content_type,
+                "approved": document.approved,
+                "created_at": document.created_at,
+            }
+            for document in affiliate.account.documents
+        ],
         "kyc_approved_for_payout": affiliate.kyc_approved_for_payout,
     }
 
