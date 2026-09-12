@@ -8,6 +8,21 @@ import { Select } from '@/components/ui/Select';
 import { FormField } from '@/components/ui/FormField';
 import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 
+export const COUNTRY_OPTIONS = [
+  { value: 'BR', label: 'Brazil (BR)' },
+  { value: 'CA', label: 'Canada (CA)' },
+  { value: 'CH', label: 'Switzerland (CH)' },
+  { value: 'DE', label: 'Germany (DE)' },
+  { value: 'ES', label: 'Spain (ES)' },
+  { value: 'FR', label: 'France (FR)' },
+  { value: 'GB', label: 'United Kingdom (GB)' },
+  { value: 'IN', label: 'India (IN)' },
+  { value: 'IT', label: 'Italy (IT)' },
+  { value: 'MX', label: 'Mexico (MX)' },
+  { value: 'PT', label: 'Portugal (PT)' },
+  { value: 'US', label: 'United States (US)' },
+];
+
 const schema = z
   .object({
     name: z.string().min(1, 'Full name is required'),
@@ -73,7 +88,17 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       <FormErrorSummary errors={errors} />
       <Input label="Full name" required {...register('name')} error={errors.name?.message} />
-      <Input label="Country" required {...register('country')} error={errors.country?.message} />
+      <FormField label="Country" error={errors.country?.message} required>
+        {(aria) => (
+          <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+            <Select
+              value={watch('country') || 'US'}
+              onChange={(v) => setValue('country', v, { shouldValidate: true })}
+              options={COUNTRY_OPTIONS}
+            />
+          </div>
+        )}
+      </FormField>
       <Input label="State / province" {...register('state')} error={errors.state?.message} />
       <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
       <Input label="Tax ID" {...register('tax_id')} error={errors.tax_id?.message} />

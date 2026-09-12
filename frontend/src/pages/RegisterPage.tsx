@@ -15,6 +15,21 @@ import { useToast } from '@/components/ui/Toast';
 import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 import { PendingInvite } from '@/api/types';
 
+const COUNTRY_OPTIONS = [
+  { value: 'BR', label: 'Brazil (BR)' },
+  { value: 'CA', label: 'Canada (CA)' },
+  { value: 'CH', label: 'Switzerland (CH)' },
+  { value: 'DE', label: 'Germany (DE)' },
+  { value: 'ES', label: 'Spain (ES)' },
+  { value: 'FR', label: 'France (FR)' },
+  { value: 'GB', label: 'United Kingdom (GB)' },
+  { value: 'IN', label: 'India (IN)' },
+  { value: 'IT', label: 'Italy (IT)' },
+  { value: 'MX', label: 'Mexico (MX)' },
+  { value: 'PT', label: 'Portugal (PT)' },
+  { value: 'US', label: 'United States (US)' },
+];
+
 export function RegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -41,6 +56,7 @@ export function RegisterPage() {
       tax_status: 'us_person',
       tax_entity_type: 'individual',
     },
+    mode: 'onTouched',
   });
 
   const taxStatus = watch('tax_status') || 'us_person';
@@ -152,7 +168,17 @@ export function RegisterPage() {
           <Input label="Email" type="email" required {...register('email')} error={errors.email?.message} defaultValue={email} />
           <Input label="Password" type="password" required {...register('password')} error={errors.password?.message} />
           <Input label="Full name" required {...register('name')} error={errors.name?.message} />
-          <Input label="Country" required {...register('country')} error={errors.country?.message} />
+          <FormField label="Country" error={errors.country?.message} required>
+            {(aria) => (
+              <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+                <Select
+                  value={watch('country') || 'US'}
+                  onChange={(v) => setValue('country', v, { shouldValidate: true })}
+                  options={COUNTRY_OPTIONS}
+                />
+              </div>
+            )}
+          </FormField>
           <Input label="State / province" {...register('state')} error={errors.state?.message} />
           <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
           <div className="grid gap-4 sm:grid-cols-2">
