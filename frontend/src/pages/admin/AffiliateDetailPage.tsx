@@ -5,6 +5,7 @@ import { PencilLine } from 'lucide-react';
 import { approveKyc, getAffiliate, rejectKyc, viewAffiliateDocument } from '@/api/admin/affiliates';
 import { getContract } from '@/api/admin/contracts';
 import { Button } from '@/components/ui/Button';
+import { PdfViewer } from '@/components/ui/PdfViewer';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { KycStatusBadge } from '@/components/shared/KycStatusBadge';
@@ -17,6 +18,7 @@ export function AffiliateDetailPage() {
   const toast = useToast();
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewType, setDocumentPreviewType] = useState<string | null>(null);
+  const [documentPreviewContentType, setDocumentPreviewContentType] = useState<string | null>(null);
 
 
   useEffect(() => () => {
@@ -130,6 +132,7 @@ export function AffiliateDetailPage() {
                     try {
                       const preview = await viewAffiliateDocument(id!, document.id);
                       setDocumentPreviewUrl(preview.url);
+                      setDocumentPreviewContentType(preview.contentType);
                       setDocumentPreviewType(document.document_type);
                     } catch {
                       toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
@@ -145,11 +148,11 @@ export function AffiliateDetailPage() {
         {documentPreviewUrl && (
           <div className="mt-4 overflow-hidden rounded-lg border border-line">
             <div className="border-b border-line px-3 py-2 text-xs font-medium text-fg-muted">Secure preview: {documentPreviewType}</div>
-            <iframe
-              title="Secure tax document preview"
-              src={documentPreviewUrl}
-              className="h-[32rem] w-full"
-            />
+            {documentPreviewContentType === 'application/pdf' ? (
+              <PdfViewer url={documentPreviewUrl} title="Secure tax document preview" />
+            ) : (
+              <img src={documentPreviewUrl} alt="Secure tax document preview" className="max-h-[32rem] w-full object-contain" />
+            )}
           </div>
         )}
       </Card>

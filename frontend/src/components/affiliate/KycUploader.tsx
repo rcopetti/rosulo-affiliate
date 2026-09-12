@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { uploadDocument, viewDocument } from '@/api/affiliate/profile';
 import { AffiliateDocument } from '@/api/types';
 import { Button } from '@/components/ui/Button';
+import { PdfViewer } from '@/components/ui/PdfViewer';
 import { useToast } from '@/components/ui/Toast';
 
 interface KycUploaderProps {
@@ -79,7 +80,11 @@ export function KycUploader({ taxStatus, taxEntityType, documents = [], onUpload
       {previewUrl && (
         <div className="overflow-hidden rounded-lg border border-line bg-surface">
           <div className="border-b border-line px-3 py-2 text-xs font-medium text-fg-muted">Secure preview: {previewType}</div>
-          <iframe title="Secure tax document preview" src={previewUrl} className="h-[32rem] w-full" />
+          {previewType === 'application/pdf' ? (
+            <PdfViewer url={previewUrl} title="Secure tax document preview" />
+          ) : (
+            <img src={previewUrl} alt="Secure tax document preview" className="max-h-[32rem] w-full object-contain" />
+          )}
         </div>
       )}
     </div>
