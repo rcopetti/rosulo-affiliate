@@ -163,7 +163,21 @@ npx playwright test
 
 ### Backend — AWS App Runner
 
-The backend is packaged with a `Dockerfile` and an `apprunner.yaml` for AWS App Runner. Build and deploy from the `backend/` directory.
+The production image is defined in `backend/docker/Dockerfile`. Build it with the build script, which tags it `<major.minor>-<git short hash>` (from `pyproject.toml`) plus `latest`, and targets `linux/amd64` for App Runner:
+
+```bash
+cd backend
+./build-docker.sh     # refuses on a dirty working tree; --force bypasses
+./auth-docker.sh      # ECR login (once per session)
+docker push <image>   # push the tags printed by the build script
+```
+
+To run the full stack locally in Docker (Postgres + one-shot migration + API):
+
+```bash
+cd backend
+docker compose -f docker/docker-compose.yml up --build
+```
 
 ### Frontend
 

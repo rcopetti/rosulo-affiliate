@@ -1,0 +1,73 @@
+# docker-compose for local development / deployment of the rosulo-affiliate backend.
+#
+# Demonstrates the init-container pattern: `migrate` is a one-shot job that
+# applies Alembic migrations and exits; `api` only starts after `migrate`
+# completes successfully (service_completed_successfully), so multiple app
+# replicas never race on the schema. The same image serves both roles.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up --build
+#   docker compose -f docker/docker-compose.yml run --rm migrate   # re-run migrations
+#   docker compose -f docker/docker-compose.yml down               # stop + remove
+#
+# Secrets are read from backend/.env (gitignored). Copy .env.example to .env
+# and fill in DATABASE_URL + SECRET_KEY at minimum. Values here are defaults
+# for local dev only.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rosulo
+      POSTGRES_PASSWORD: rosulo
+      POSTGRES_DB: rosulo_affiliate
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rosulo -d rosulo_affiliate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  # One-shot init job: runs `alembic upgrade head` and exits 0.
+  # `restart: "no"` keeps it from looping on failure (surface the error instead).
+  migrate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: rosulo-affiliate-backend:dev
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      # Override the host in DATABASE_URL to point at the compose service.
+      DATABASE_URL: postgresql+asyncpg://rosulo:rosulo@db:5432/rosulo_affiliate
+
+  # App server: starts only after migrations completed successfully.
+  # No migrations run here — safe to scale replicas.
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: rosulo-affiliate-backend:dev
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rosulo:rosulo@db:5432/rosulo_affiliate
+    restart: unless-stopped
+
+volumes:
+  db-data:
