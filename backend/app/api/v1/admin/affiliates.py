@@ -45,7 +45,7 @@ async def admin_view_document(affiliate_id: str, document_id: str, tenant: Tenan
         raise HTTPException(status_code=404, detail="Document not found") from exc
     result = await db.execute(select(AffiliateDocument).where(
         AffiliateDocument.id == parsed_id,
-        AffiliateDocument.affiliate_account_id == affiliate["account_id"],
+        AffiliateDocument.affiliate_account_id == affiliate["affiliate_account_id"],
     ))
     document = result.scalar_one_or_none()
     if not document:
