@@ -170,6 +170,8 @@ cd backend
 ./build-docker.sh     # refuses on a dirty working tree; --force bypasses
 ./auth-docker.sh      # ECR login (once per session)
 docker push <image>   # push the tags printed by the build script
+./run-migration.sh <tag>      # one-shot Fargate task: alembic upgrade head
+./deploy-apprunner.sh <tag>   # roll out to the Rosulo-Affiliates App Runner service
 ```
 
 To run the full stack locally in Docker (Postgres + one-shot migration + API):
