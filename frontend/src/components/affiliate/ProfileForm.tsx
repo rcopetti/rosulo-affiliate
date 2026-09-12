@@ -8,18 +8,28 @@ import { Select } from '@/components/ui/Select';
 import { FormField } from '@/components/ui/FormField';
 import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 
-const schema = z.object({
-  name: z.string().min(1, 'Full name is required'),
-  country: z.string().min(1, 'Country is required'),
-  state: z.string().nullish(),
-  postal_code: z.string().min(1, 'Postal code is required'),
-  tax_id: z.string().nullish(),
-  tax_status: z.enum(['us_person', 'foreign_person']).nullish(),
-  tax_entity_type: z.enum(['individual', 'business']).nullish(),
-  business_name: z.string().nullish(),
-  tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).nullish(),
-  paypal_email: z.string().email('Enter a valid PayPal email'),
-});
+const schema = z
+  .object({
+    name: z.string().min(1, 'Full name is required'),
+    country: z.string().min(1, 'Country is required'),
+    state: z.string().nullish(),
+    postal_code: z.string().min(1, 'Postal code is required'),
+    tax_id: z.string().nullish(),
+    tax_status: z.enum(['us_person', 'foreign_person']).nullish(),
+    tax_entity_type: z.enum(['individual', 'business']).nullish(),
+    business_name: z.string().nullish(),
+    tax_form_type: z.enum(['W-9', 'W-8BEN', 'W-8BEN-E']).nullish(),
+    paypal_email: z.string().email('Enter a valid PayPal email'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tax_entity_type === 'business' && !data.business_name?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['business_name'],
+        message: 'Legal business name is required',
+      });
+    }
+  });
 
 export type ProfileFormData = z.infer<typeof schema>;
 
@@ -35,6 +45,7 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
     handleSubmit,
     setValue,
     watch,
+    trigger,
     formState: { errors },
   } = useForm<ProfileFormData>({
     resolver: zodResolver(schema),
@@ -86,7 +97,12 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
             <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
               <Select
                 value={taxEntityType}
-                onChange={(v) => setValue('tax_entity_type', v as 'individual' | 'business', { shouldValidate: true })}
+                onChange={(v) => {
+                  setValue('tax_entity_type', v as 'individual' | 'business', { shouldValidate: true });
+                  if (v !== 'business') {
+                    void trigger('business_name');
+                  }
+                }}
                 options={[
                   { value: 'individual', label: 'Individual' },
                   { value: 'business', label: 'Business/entity' },
