@@ -4,6 +4,7 @@ import { AffiliateDocument } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { PdfViewer } from '@/components/ui/PdfViewer';
 import { useToast } from '@/components/ui/Toast';
+import { formatDateTime } from '@/lib/utils';
 
 interface KycUploaderProps {
   taxStatus?: 'us_person' | 'foreign_person' | null;
@@ -60,11 +61,18 @@ export function KycUploader({ taxStatus, taxEntityType, documents = [], onUpload
       </div>
       {documents.length > 0 && (
         <div className="space-y-2">
-          {documents.map((document) => (
+          {[...documents]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .map((document, index) => (
             <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
               <div>
-                <p className="text-sm font-medium text-fg">{document.document_type}</p>
-                <p className="text-xs text-fg-muted">{document.approved ? 'Approved' : 'Pending review'}</p>
+                <p className="text-sm font-medium text-fg">
+                  {document.document_type}
+                  {index === 0 && <span className="ml-2 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-fg">Most recent</span>}
+                </p>
+                <p className="text-xs text-fg-muted">
+                  Submitted {formatDateTime(document.created_at)} · {document.approved ? 'Approved' : 'Pending review'}
+                </p>
               </div>
               <Button variant="secondary" size="sm" onClick={() => preview(document)} isLoading={previewLoading === document.id}>
                 View securely

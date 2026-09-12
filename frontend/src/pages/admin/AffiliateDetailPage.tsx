@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { KycStatusBadge } from '@/components/shared/KycStatusBadge';
 import { useToast } from '@/components/ui/Toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDateTime } from '@/lib/utils';
 
 export function AffiliateDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -119,11 +119,18 @@ export function AffiliateDetailPage() {
         </CardHeader>
         {data.documents?.length ? (
           <div className="space-y-2">
-            {data.documents.map((document) => (
+            {[...data.documents]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((document, index) => (
               <div key={document.id} className="flex items-center justify-between gap-4 rounded-lg border border-line p-3">
                 <div>
-                  <p className="text-sm font-medium text-fg">{document.document_type}</p>
-                  <p className="text-xs text-fg-muted">{document.approved ? 'Approved' : 'Pending review'}</p>
+                  <p className="text-sm font-medium text-fg">
+                    {document.document_type}
+                    {index === 0 && <span className="ml-2 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-fg">Most recent</span>}
+                  </p>
+                  <p className="text-xs text-fg-muted">
+                    Submitted {formatDateTime(document.created_at)} · {document.approved ? 'Approved' : 'Pending review'}
+                  </p>
                 </div>
                 <Button
                   variant="secondary"
