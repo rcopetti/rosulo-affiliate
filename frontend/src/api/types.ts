@@ -9,14 +9,17 @@ export interface AffiliateAccount {
   id: string;
   email: string;
   name: string;
-  country?: string;
-  state?: string;
-  tax_id?: string;
-  tax_status?: 'us_person' | 'non_us_person';
-  tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E';
-  paypal_email?: string;
+  country?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  tax_id?: string | null;
+  tax_status?: 'us_person' | 'foreign_person' | null;
+  tax_entity_type?: 'individual' | 'business' | null;
+  business_name?: string | null;
+  tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
+  paypal_email?: string | null;
   backup_withholding_required?: boolean;
-  documents?: Document[];
+  documents?: AffiliateDocument[];
 }
 
 export interface Document {
@@ -27,12 +30,29 @@ export interface Document {
   uploaded_at: string;
 }
 
+export interface AffiliateDocument {
+  id: string;
+  document_type: string;
+  content_type: string;
+  approved: boolean;
+  created_at: string;
+}
+
 export interface Affiliate {
   id: string;
   account_id: string;
   tenant_id: string;
   email: string;
   name: string;
+  country?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  paypal_email?: string | null;
+  tax_status?: 'us_person' | 'foreign_person' | null;
+  tax_entity_type?: 'individual' | 'business' | null;
+  business_name?: string | null;
+  tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
+  documents?: AffiliateDocument[];
   kyc_approved_for_payout: boolean;
   enabled: boolean;
   contract?: Contract;

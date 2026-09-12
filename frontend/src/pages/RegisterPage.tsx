@@ -7,10 +7,28 @@ import { registerAffiliate, listInvites, acceptInvite } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { FormField } from '@/components/ui/FormField';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { registerSchema, RegisterInput } from '@/lib/validators';
 import { useToast } from '@/components/ui/Toast';
+import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 import { PendingInvite } from '@/api/types';
+
+const COUNTRY_OPTIONS = [
+  { value: 'BR', label: 'Brazil (BR)' },
+  { value: 'CA', label: 'Canada (CA)' },
+  { value: 'CH', label: 'Switzerland (CH)' },
+  { value: 'DE', label: 'Germany (DE)' },
+  { value: 'ES', label: 'Spain (ES)' },
+  { value: 'FR', label: 'France (FR)' },
+  { value: 'GB', label: 'United Kingdom (GB)' },
+  { value: 'IN', label: 'India (IN)' },
+  { value: 'IT', label: 'Italy (IT)' },
+  { value: 'MX', label: 'Mexico (MX)' },
+  { value: 'PT', label: 'Portugal (PT)' },
+  { value: 'US', label: 'United States (US)' },
+];
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -27,6 +45,8 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
@@ -34,8 +54,13 @@ export function RegisterPage() {
       email,
       country: 'US',
       tax_status: 'us_person',
+      tax_entity_type: 'individual',
     },
+    mode: 'onTouched',
   });
+
+  const taxStatus = watch('tax_status') || 'us_person';
+  const taxEntityType = watch('tax_entity_type') || 'individual';
 
   const registerMutation = useMutation({
     mutationFn: registerAffiliate,
@@ -92,7 +117,7 @@ export function RegisterPage() {
           <CardHeader>
             <CardTitle>Invalid invite</CardTitle>
           </CardHeader>
-          <p className="px-6 pb-6 text-sm text-slate-600">
+          <p className="text-sm text-fg-muted">
             Affiliate accounts are created by accepting a tenant invitation.
             Please use the link from your invitation email.
           </p>
@@ -108,7 +133,7 @@ export function RegisterPage() {
           <CardHeader>
             <CardTitle>Accept invitation</CardTitle>
           </CardHeader>
-          <div className="space-y-4 px-6 pb-6">
+          <div className="space-y-4">
             <p className="text-sm text-slate-600">
               You have been invited to join <strong>{invite.tenant_name}</strong>.
             </p>
@@ -138,12 +163,62 @@ export function RegisterPage() {
         <CardHeader>
           <CardTitle>Create affiliate account</CardTitle>
         </CardHeader>
-        <form onSubmit={handleSubmit((v) => registerMutation.mutate(v))} className="space-y-4">
-          <Input label="Email" type="email" {...register('email')} error={errors.email?.message} defaultValue={email} />
-          <Input label="Password" type="password" {...register('password')} error={errors.password?.message} />
-          <Input label="Full name" {...register('name')} error={errors.name?.message} />
-          <Input label="Country" {...register('country')} error={errors.country?.message} />
+        <form onSubmit={handleSubmit((v) => registerMutation.mutate(v))} className="space-y-4" noValidate>
+          <FormErrorSummary errors={errors} />
+          <Input label="Email" type="email" required {...register('email')} error={errors.email?.message} defaultValue={email} />
+          <Input label="Password" type="password" required {...register('password')} error={errors.password?.message} />
+          <Input label="Full name" required {...register('name')} error={errors.name?.message} />
+          <FormField label="Country" error={errors.country?.message} required>
+            {(aria) => (
+              <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+                <Select
+                  value={watch('country') || 'US'}
+                  onChange={(v) => setValue('country', v, { shouldValidate: true })}
+                  options={COUNTRY_OPTIONS}
+                />
+              </div>
+            )}
+          </FormField>
           <Input label="State / province" {...register('state')} error={errors.state?.message} />
+          <Input label="Postal code" required {...register('postal_code')} error={errors.postal_code?.message} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Tax status" helperText="Determines the required IRS form.">
+              {(aria) => (
+                <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+                  <Select
+                    value={taxStatus}
+                    onChange={(v) => setValue('tax_status', v as 'us_person' | 'foreign_person')}
+                    options={[
+                      { value: 'us_person', label: 'US person' },
+                      { value: 'foreign_person', label: 'Foreign person' },
+                    ]}
+                  />
+                </div>
+              )}
+            </FormField>
+            <FormField label="Payee type" helperText="Individual or business/entity.">
+              {(aria) => (
+                <div aria-invalid={aria['aria-invalid']} aria-describedby={aria['aria-describedby']}>
+                  <Select
+                    value={taxEntityType}
+                    onChange={(v) => setValue('tax_entity_type', v as 'individual' | 'business')}
+                    options={[
+                      { value: 'individual', label: 'Individual' },
+                      { value: 'business', label: 'Business/entity' },
+                    ]}
+                  />
+                </div>
+              )}
+            </FormField>
+          </div>
+          {taxEntityType === 'business' && <Input label="Legal business name" {...register('business_name')} />}
+          <Input
+            label="PayPal account (for payouts)"
+            type="email"
+            required
+            {...register('paypal_email')}
+            error={errors.paypal_email?.message}
+          />
           <Button type="submit" isLoading={registerMutation.isPending} className="w-full">
             Create account
           </Button>

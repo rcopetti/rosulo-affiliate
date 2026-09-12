@@ -20,7 +20,7 @@ export function PayoutsPage() {
         <CardHeader>
           <CardTitle>Payout history</CardTitle>
         </CardHeader>
-        {isLoading ? <p className="p-4 text-slate-600">Loading…</p> : <PayoutsTable payouts={payouts || []} />}
+        {isLoading ? <p className="text-sm text-fg-muted">Loading…</p> : <PayoutsTable payouts={payouts || []} />}
       </Card>
     </div>
   );

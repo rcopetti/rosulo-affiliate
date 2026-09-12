@@ -3,9 +3,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { FormErrorSummary } from '@/components/ui/FormErrorSummary';
 
 const schema = z.object({
-  email: z.string().email(),
+  email: z.string().email('Enter a valid email address'),
 });
 
 export type AffiliateFormData = z.infer<typeof schema>;
@@ -23,8 +24,9 @@ export function AffiliateForm({ onSubmit, isLoading }: AffiliateFormProps) {
   } = useForm<AffiliateFormData>({ resolver: zodResolver(schema) });
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <Input label="Email" type="email" {...register('email')} error={errors.email?.message} />
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <FormErrorSummary errors={errors} />
+      <Input label="Email" type="email" required {...register('email')} error={errors.email?.message} />
       <Button type="submit" isLoading={isLoading}>
         Send invite
       </Button>

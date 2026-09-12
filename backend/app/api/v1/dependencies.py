@@ -5,6 +5,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.dependencies import get_db
 from app.db.models import Affiliate, AffiliateAccount, AffiliateInvite, Tenant, TenantUser
@@ -81,7 +82,9 @@ async def get_current_affiliate_account(
     if not subject:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     result = await db.execute(
-        select(AffiliateAccount).where(AffiliateAccount.id == uuid.UUID(subject))
+        select(AffiliateAccount)
+        .options(selectinload(AffiliateAccount.documents))
+        .where(AffiliateAccount.id == uuid.UUID(subject))
     )
     account = result.scalar_one_or_none()
     if not account:

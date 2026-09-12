@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Affiliate, Tenant
+from app.db.models import Affiliate, AffiliateAccount, Tenant
 
 
 def _affiliate_out(affiliate: Affiliate) -> dict:
@@ -14,6 +14,24 @@ def _affiliate_out(affiliate: Affiliate) -> dict:
         "affiliate_account_id": affiliate.affiliate_account_id,
         "email": affiliate.account.email,
         "name": affiliate.account.name,
+        "country": affiliate.account.country,
+        "state": affiliate.account.state,
+        "postal_code": affiliate.account.postal_code,
+        "paypal_email": affiliate.account.paypal_email,
+        "tax_status": affiliate.account.tax_status,
+        "tax_entity_type": affiliate.account.tax_entity_type,
+        "business_name": affiliate.account.business_name,
+        "tax_form_type": affiliate.account.tax_form_type,
+        "documents": [
+            {
+                "id": document.id,
+                "document_type": document.document_type,
+                "content_type": document.content_type,
+                "approved": document.approved,
+                "created_at": document.created_at,
+            }
+            for document in affiliate.account.documents
+        ],
         "kyc_approved_for_payout": affiliate.kyc_approved_for_payout,
     }
 
@@ -21,7 +39,7 @@ def _affiliate_out(affiliate: Affiliate) -> dict:
 async def list_affiliates(db: AsyncSession, tenant: Tenant):
     result = await db.execute(
         select(Affiliate)
-        .options(selectinload(Affiliate.account))
+        .options(selectinload(Affiliate.account).selectinload(AffiliateAccount.documents))
         .where(Affiliate.tenant_id == tenant.id)
     )
     return [_affiliate_out(a) for a in result.scalars().all()]
@@ -30,7 +48,7 @@ async def list_affiliates(db: AsyncSession, tenant: Tenant):
 async def get_affiliate(db: AsyncSession, affiliate_id: uuid.UUID, tenant: Tenant):
     result = await db.execute(
         select(Affiliate)
-        .options(selectinload(Affiliate.account))
+        .options(selectinload(Affiliate.account).selectinload(AffiliateAccount.documents))
         .where(
             Affiliate.id == affiliate_id,
             Affiliate.tenant_id == tenant.id,

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getContract, updateContract } from '@/api/admin/contracts';
 import { ContractForm } from '@/components/admin/ContractForm';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { useToast } from '@/components/ui/Toast';
 import { Term } from '@/api/types';
 
@@ -39,7 +40,14 @@ export function ContractEditPage() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Edit contract</h1>
+      <Breadcrumbs
+        items={[
+          { label: 'Affiliates', to: '/admin/affiliates' },
+          { label: 'Affiliate', to: `/admin/affiliates/${id}` },
+          { label: 'Edit contract' },
+        ]}
+      />
+      <h1 className="text-2xl font-bold text-fg">Edit contract</h1>
       <Card>
         <CardHeader>
           <CardTitle>Terms</CardTitle>

@@ -20,7 +20,7 @@ export function CampaignsPage() {
         <CardHeader>
           <CardTitle>Your campaigns</CardTitle>
         </CardHeader>
-        {isLoading ? <p className="p-4 text-slate-600">Loading…</p> : <CampaignsTable campaigns={campaigns || []} />}
+        {isLoading ? <p className="text-sm text-fg-muted">Loading…</p> : <CampaignsTable campaigns={campaigns || []} />}
       </Card>
     </div>
   );

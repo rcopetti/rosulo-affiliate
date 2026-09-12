@@ -18,7 +18,7 @@ export function RequestPayoutPage() {
   const { data: balance, isLoading } = useQuery({ queryKey: ['affiliate-balance'], queryFn: getBalance });
   const { data: profile } = useQuery({ queryKey: ['affiliate-account'], queryFn: getProfile });
 
-  const kycApproved = profile?.documents?.every((d) => d.status === 'approved') ?? false;
+  const kycApproved = profile?.documents?.length ? profile.documents.every((d) => d.approved) : false;
 
   const mutation = useMutation({
     mutationFn: () => requestPayout(balance?.available || 0),
@@ -37,7 +37,7 @@ export function RequestPayoutPage() {
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-bold text-slate-900">Request Payout</h1>
       {!kycApproved && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning-fg" role="status">
           Your documents are not yet approved. You cannot request a payout until KYC is approved.
         </div>
       )}
@@ -45,7 +45,7 @@ export function RequestPayoutPage() {
         <CardHeader>
           <CardTitle>Available balance</CardTitle>
         </CardHeader>
-        <div className="px-6 pb-6">
+        <div className="">
           <p className="text-4xl font-bold text-slate-900">{formatCurrency(balance.available, balance.currency)}</p>
           <p className="mt-2 flex items-center gap-2 text-sm text-slate-600">
             KYC status: <KycStatusBadge approved={kycApproved} />

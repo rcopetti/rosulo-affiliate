@@ -9,20 +9,20 @@ from app.db.models import Tenant
 @pytest.mark.asyncio
 async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "payout@example.com"},
     )
     invite_token = invite.json()["token"]
 
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite_token,
             "email": "payout@example.com",
@@ -36,7 +36,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
     token = accept.json()["token"]
 
     affiliates = await client.get(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     account_id = accept.json()["account"]["id"]
@@ -44,7 +44,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
 
     # create campaign
     camp = await client.post(
-        "/v1/affiliate/campaigns",
+        "/api/v1/affiliate/campaigns",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
         json={"name": "Payout Camp", "landing_url": "https://allbum.me/p"},
     )
@@ -52,13 +52,13 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
 
     # approve KYC
     await client.post(
-        f"/v1/admin/affiliates/{affiliate_id}/approve",
+        f"/api/v1/admin/affiliates/{affiliate_id}/approve",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     # sale event with payment record
     await client.post(
-        "/v1/events",
+        "/api/v1/events",
         headers={"X-API-Key": "test-api-key"},
         json={
             "event_id": "payout-sale-1",
@@ -75,7 +75,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
 
     # payment record webhook
     await client.post(
-        "/v1/webhooks/tenant",
+        "/api/v1/webhooks/tenant",
         headers={"X-API-Key": "test-api-key"},
         json={
             "payment_record_id": "payout-pay-1",
@@ -89,7 +89,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
 
     # request payout
     req = await client.post(
-        "/v1/affiliate/payout-requests",
+        "/api/v1/affiliate/payout-requests",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
     )
     assert req.status_code == 200
@@ -98,7 +98,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
 
     # approve payout
     aprv = await client.post(
-        f"/v1/admin/payouts/{payout_id}/approve",
+        f"/api/v1/admin/payouts/{payout_id}/approve",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert aprv.status_code == 200

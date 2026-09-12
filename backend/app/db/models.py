@@ -75,8 +75,11 @@ class AffiliateAccount(Base):
     name = Column(String, nullable=False)
     country = Column(String, nullable=False)
     state = Column(String, nullable=True)
+    postal_code = Column(String, nullable=True)
     tax_id = Column(String, nullable=True)
     tax_status = Column(String, nullable=False, default="us_person")
+    tax_entity_type = Column(String, nullable=False, default="individual")
+    business_name = Column(String, nullable=True)
     tax_form_type = Column(String, nullable=True)
     withholding_certificate = Column(String, nullable=True)
     backup_withholding_required = Column(Boolean, default=False)
@@ -114,7 +117,9 @@ class AffiliateDocument(Base):
         UUID(as_uuid=True), ForeignKey("affiliate_accounts.id"), nullable=False
     )
     document_type = Column(String, nullable=False)
-    document_url = Column(String, nullable=False)
+    document_url = Column(String, nullable=False)  # private S3 object key
+    content_type = Column(String, nullable=False, default="application/octet-stream")
+    file_size = Column(Integer, nullable=False, default=0)
     approved = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     account = relationship("AffiliateAccount", back_populates="documents")

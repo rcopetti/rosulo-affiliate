@@ -36,7 +36,7 @@ export function AdminPayoutsPage() {
           <CardTitle>Payout requests</CardTitle>
         </CardHeader>
         {isLoading ? (
-          <p className="p-4 text-slate-600">Loading…</p>
+          <p className="text-sm text-fg-muted">Loading…</p>
         ) : (
           <PayoutQueue
             payouts={data || []}

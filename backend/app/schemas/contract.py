@@ -14,7 +14,9 @@ class TermBase(BaseModel):
 
 
 class TermCreate(TermBase):
-    pass
+    # Client-generated field-array ids for new terms are not valid UUIDs;
+    # sync_terms treats unparseable ids as new terms.
+    id: str | None = None
 
 
 class TermUpdate(BaseModel):
@@ -42,3 +44,4 @@ class ContractOut(BaseModel):
 
 class ContractUpdate(BaseModel):
     active: bool | None = None
+    terms: list[TermCreate] | None = None

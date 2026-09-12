@@ -1,0 +1,35 @@
+# Version control & IDE
+.git/
+.gitignore
+.vscode/
+
+# Python caches & tooling state
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+rosulo_affiliate.egg-info/
+
+# Local virtualenv — the image builds its own inside the builder stage.
+.venv/
+
+# Secrets — never bake these into an image. Inject at runtime via env vars.
+.env
+.env.*
+!.env.example
+
+# Tests are not needed at runtime.
+tests/
+
+# Docker artifacts themselves don't belong in the image context's app layer.
+# (docker/entrypoint.sh is NOT ignored — the Dockerfile COPYs it in.)
+docker/Dockerfile
+docker/.dockerignore
+docker/docker-compose.yml
+build-docker.sh
+auth-docker.sh
+
+# OS noise
+.DS_Store

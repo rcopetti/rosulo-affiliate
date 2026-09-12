@@ -11,20 +11,20 @@ async def test_sale_generates_commission(
     client: AsyncClient, tenant: Tenant, tenant_user
 ):
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "commission@example.com"},
     )
     invite_token = invite.json()["token"]
 
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite_token,
             "email": "commission@example.com",
@@ -37,7 +37,7 @@ async def test_sale_generates_commission(
     token = accept.json()["token"]
 
     camp = await client.post(
-        "/v1/affiliate/campaigns",
+        "/api/v1/affiliate/campaigns",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
         json={"name": "Commission Camp", "landing_url": "https://allbum.me/c"},
     )
@@ -46,7 +46,7 @@ async def test_sale_generates_commission(
     # idempotent duplicate should not create new event
     for _ in range(2):
         r = await client.post(
-            "/v1/events",
+            "/api/v1/events",
             headers={"X-API-Key": "test-api-key"},
             json={
                 "event_id": "comm-sale-1",
@@ -63,7 +63,7 @@ async def test_sale_generates_commission(
 
     # one commission from first sale
     comms = await client.get(
-        "/v1/affiliate/commissions",
+        "/api/v1/affiliate/commissions",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
     )
     assert comms.status_code == 200
@@ -76,20 +76,20 @@ async def test_sale_without_matching_sequence_creates_no_commission(
     client: AsyncClient, tenant: Tenant, tenant_user
 ):
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "sequence@example.com"},
     )
     invite_token = invite.json()["token"]
 
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite_token,
             "email": "sequence@example.com",
@@ -102,7 +102,7 @@ async def test_sale_without_matching_sequence_creates_no_commission(
     token = accept.json()["token"]
 
     camp = await client.post(
-        "/v1/affiliate/campaigns",
+        "/api/v1/affiliate/campaigns",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
         json={"name": "Sequence Camp", "landing_url": "https://allbum.me/s"},
     )
@@ -110,7 +110,7 @@ async def test_sale_without_matching_sequence_creates_no_commission(
 
     # Default contract only covers payment_sequence 1.
     sale = await client.post(
-        "/v1/events",
+        "/api/v1/events",
         headers={"X-API-Key": "test-api-key"},
         json={
             "event_id": "seq-sale-2",
@@ -125,7 +125,7 @@ async def test_sale_without_matching_sequence_creates_no_commission(
     assert sale.status_code == 200
 
     comms = await client.get(
-        "/v1/affiliate/commissions",
+        "/api/v1/affiliate/commissions",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
     )
     assert comms.status_code == 200
