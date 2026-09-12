@@ -33,6 +33,7 @@ export interface Document {
 export interface AffiliateDocument {
   id: string;
   document_type: string;
+  content_type: string;
   approved: boolean;
   created_at: string;
 }

@@ -44,9 +44,9 @@ export async function updateAffiliate(id: string, data: Partial<Affiliate>): Pro
   return res.data;
 }
 
-export async function viewAffiliateDocument(affiliateId: string, documentId: string): Promise<string> {
+export async function viewAffiliateDocument(affiliateId: string, documentId: string): Promise<{ url: string; contentType: string }> {
   const res = await adminApi.get(`/admin/affiliates/${affiliateId}/documents/${documentId}/view`, { responseType: 'blob' });
-  return URL.createObjectURL(res.data);
+  return { url: URL.createObjectURL(res.data), contentType: String(res.headers['content-type'] || 'application/octet-stream') };
 }
 
 export async function approveKyc(id: string): Promise<void> {

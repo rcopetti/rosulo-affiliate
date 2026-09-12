@@ -10,6 +10,7 @@ class AffiliateDocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     document_type: str
+    content_type: str
     approved: bool
     created_at: datetime.datetime
 
