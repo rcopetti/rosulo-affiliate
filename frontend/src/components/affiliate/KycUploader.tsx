@@ -79,7 +79,7 @@ export function KycUploader({ taxStatus, taxEntityType, documents = [], onUpload
       {previewUrl && (
         <div className="overflow-hidden rounded-lg border border-line bg-surface">
           <div className="border-b border-line px-3 py-2 text-xs font-medium text-fg-muted">Secure preview: {previewType}</div>
-          <iframe title="Secure tax document preview" src={`${previewUrl}#toolbar=0&download=0&navpanes=0`} className="h-[32rem] w-full" />
+          <iframe title="Secure tax document preview" src={previewUrl} className="h-[32rem] w-full" />
         </div>
       )}
     </div>

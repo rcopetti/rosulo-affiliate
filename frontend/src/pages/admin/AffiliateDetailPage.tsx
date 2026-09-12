@@ -147,7 +147,7 @@ export function AffiliateDetailPage() {
             <div className="border-b border-line px-3 py-2 text-xs font-medium text-fg-muted">Secure preview: {documentPreviewType}</div>
             <iframe
               title="Secure tax document preview"
-              src={`${documentPreviewUrl}#toolbar=0&download=0&navpanes=0`}
+              src={documentPreviewUrl}
               className="h-[32rem] w-full"
             />
           </div>
