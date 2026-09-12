@@ -37,10 +37,9 @@ function CopyCampaignLink({ campaign }: { campaign: Campaign }) {
       onClick={copy}
       aria-label={`Copy campaign link for ${campaign.name}`}
       title={campaignLink}
-      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg  bg-surface px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
-      {copied ? 'Copied' : 'Copy link'}
     </button>
   );
 }
