@@ -14,7 +14,9 @@ if TEST_DATABASE_URL:
 else:
     _url = make_url(settings.database_url)
     _test_db = f"{_url.database}_test"
-    _TEST_DATABASE_URL = str(_url.set(database=_test_db))
+    # render_as_string(hide_password=False) — str(URL) masks the password as
+    # '***' in SQLAlchemy 2.x, which would break authentication downstream.
+    _TEST_DATABASE_URL = _url.set(database=_test_db).render_as_string(hide_password=False)
 
 settings.database_url = _TEST_DATABASE_URL
 os.environ["DATABASE_URL"] = _TEST_DATABASE_URL

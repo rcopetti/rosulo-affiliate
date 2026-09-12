@@ -7,20 +7,20 @@ from app.db.models import Tenant
 @pytest.mark.asyncio
 async def test_admin_get_contract(client: AsyncClient, tenant: Tenant, tenant_user):
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "contract@example.com"},
     )
     invite_token = invite.json()["token"]
 
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite_token,
             "email": "contract@example.com",
@@ -32,14 +32,14 @@ async def test_admin_get_contract(client: AsyncClient, tenant: Tenant, tenant_us
     )
 
     affiliates = await client.get(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     account_id = accept.json()["account"]["id"]
     affiliate_id = next(a["id"] for a in affiliates.json() if a["account_id"] == account_id)
 
     r = await client.get(
-        f"/v1/admin/affiliates/{affiliate_id}/contract",
+        f"/api/v1/admin/affiliates/{affiliate_id}/contract",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert r.status_code == 200
@@ -49,20 +49,20 @@ async def test_admin_get_contract(client: AsyncClient, tenant: Tenant, tenant_us
 @pytest.mark.asyncio
 async def test_update_contract_persists_terms(client: AsyncClient, tenant: Tenant, tenant_user):
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "terms-save@example.com"},
     )
     invite_token = invite.json()["token"]
 
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite_token,
             "email": "terms-save@example.com",
@@ -75,14 +75,14 @@ async def test_update_contract_persists_terms(client: AsyncClient, tenant: Tenan
     account_id = accept.json()["account"]["id"]
 
     affiliates = await client.get(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     affiliate_id = next(a["id"] for a in affiliates.json() if a["account_id"] == account_id)
 
     contract = (
         await client.get(
-            f"/v1/admin/affiliates/{affiliate_id}/contract",
+            f"/api/v1/admin/affiliates/{affiliate_id}/contract",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
     ).json()
@@ -105,7 +105,7 @@ async def test_update_contract_persists_terms(client: AsyncClient, tenant: Tenan
         ]
     }
     put = await client.put(
-        f"/v1/admin/affiliates/{affiliate_id}/contract",
+        f"/api/v1/admin/affiliates/{affiliate_id}/contract",
         headers={"Authorization": f"Bearer {admin_token}"},
         json=payload,
     )
@@ -113,7 +113,7 @@ async def test_update_contract_persists_terms(client: AsyncClient, tenant: Tenan
 
     saved = (
         await client.get(
-            f"/v1/admin/affiliates/{affiliate_id}/contract",
+            f"/api/v1/admin/affiliates/{affiliate_id}/contract",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
     ).json()

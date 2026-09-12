@@ -7,20 +7,20 @@ from app.db.models import Tenant
 @pytest.mark.asyncio
 async def test_profile_can_be_saved_without_tax_fields(client: AsyncClient, tenant: Tenant, tenant_user):
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "profile@example.com"},
     )
     invite_token = invite.json()["token"]
 
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite_token,
             "email": "profile@example.com",
@@ -34,7 +34,7 @@ async def test_profile_can_be_saved_without_tax_fields(client: AsyncClient, tena
 
     # Save profile without any tax fields (no tax_status, tax_id, or tax document type).
     r = await client.patch(
-        "/v1/affiliate/profile",
+        "/api/v1/affiliate/profile",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "name": "Profile Updated",

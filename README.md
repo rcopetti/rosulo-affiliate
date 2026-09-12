@@ -155,7 +155,7 @@ npx playwright test
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_API_BASE_URL` | Backend API base URL (default `/api/v1`, proxied by Vite dev server to `/v1` on the backend) |
+| `VITE_API_BASE_URL` | Backend API base URL (default `/api/v1`; the Vite dev server proxies `/api/*` to the backend unchanged) |
 
 ---
 
@@ -183,7 +183,18 @@ docker compose -f docker/docker-compose.yml up --build
 
 ### Frontend
 
-Run `npm run build` to produce a `dist/` directory. Serve the `dist/` directory with any static host or CDN.
+Build the static bundle with the build script, which loads env vars from `frontend/.env.prod` (create it from `.env.example`) and outputs a minified production bundle to `frontend/dist/`:
+
+```bash
+cd frontend
+./build-web.sh                  # production build (loads .env.prod)
+./build-web.sh --env .env       # local/sandbox build
+./build-web.sh --dev            # non-minified, for staging inspection
+./build-web.sh --clean          # clear the Vite cache before building
+./build-web.sh --api-url URL    # talk directly to a backend URL (needs CORS)
+```
+
+Serve the `dist/` directory with any static host or CDN. The app calls the API via same-origin relative paths (`/api/v1`), so the CDN should proxy `/api/*` to the backend (App Runner) and fall back to `/index.html` for SPA routing.
 
 ---
 

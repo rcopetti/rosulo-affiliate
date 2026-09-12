@@ -5,7 +5,7 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 async def test_tenant_user_register(client: AsyncClient):
     register = await client.post(
-        "/v1/auth/tenant/register",
+        "/api/v1/auth/tenant/register",
         json={
             "tenant_name": "New Merchant",
             "email": "new@merchant.com",
@@ -24,7 +24,7 @@ async def test_tenant_user_register(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_tenant_user_login(client: AsyncClient, tenant_user):
     login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     assert login.status_code == 200
@@ -39,13 +39,13 @@ async def test_affiliate_invite_accept_and_login(
 ):
     # Admin creates an invite
     admin_login = await client.post(
-        "/v1/auth/tenant/login",
+        "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
     )
     admin_token = admin_login.json()["token"]
 
     invite_resp = await client.post(
-        "/v1/admin/affiliates",
+        "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "email": "aff@example.com",
@@ -61,7 +61,7 @@ async def test_affiliate_invite_accept_and_login(
 
     # Affiliate accepts the invite
     accept = await client.post(
-        "/v1/auth/affiliate/accept-invite",
+        "/api/v1/auth/affiliate/accept-invite",
         json={
             "token": invite["token"],
             "email": "aff@example.com",
@@ -79,7 +79,7 @@ async def test_affiliate_invite_accept_and_login(
 
     # Affiliate logs in
     login = await client.post(
-        "/v1/auth/affiliate/login",
+        "/api/v1/auth/affiliate/login",
         json={"email": "aff@example.com", "password": "secret123"},
     )
     assert login.status_code == 200
