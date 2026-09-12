@@ -17,7 +17,7 @@ export function AffiliateDetailPage() {
   const toast = useToast();
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewType, setDocumentPreviewType] = useState<string | null>(null);
-  const [documentPreviewContentType, setDocumentPreviewContentType] = useState<string | null>(null);
+
 
   useEffect(() => () => {
     if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
@@ -130,7 +130,6 @@ export function AffiliateDetailPage() {
                     try {
                       const preview = await viewAffiliateDocument(id!, document.id);
                       setDocumentPreviewUrl(preview.url);
-                      setDocumentPreviewContentType(preview.contentType);
                       setDocumentPreviewType(document.document_type);
                     } catch {
                       toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
@@ -146,11 +145,11 @@ export function AffiliateDetailPage() {
         {documentPreviewUrl && (
           <div className="mt-4 overflow-hidden rounded-lg border border-line">
             <div className="border-b border-line px-3 py-2 text-xs font-medium text-fg-muted">Secure preview: {documentPreviewType}</div>
-            {documentPreviewContentType?.startsWith('image/') ? (
-              <img src={documentPreviewUrl} alt="Secure tax document preview" className="max-h-[32rem] w-full object-contain" onContextMenu={(event) => event.preventDefault()} />
-            ) : (
-              <iframe title="Secure tax document preview" sandbox="allow-same-origin" src={`${documentPreviewUrl}#toolbar=0&download=0&navpanes=0`} className="h-[32rem] w-full" onContextMenu={(event) => event.preventDefault()} />
-            )}
+            <iframe
+              title="Secure tax document preview"
+              src={`${documentPreviewUrl}#toolbar=0&download=0&navpanes=0`}
+              className="h-[32rem] w-full"
+            />
           </div>
         )}
       </Card>
