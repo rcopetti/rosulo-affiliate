@@ -97,7 +97,12 @@ export function ProfileForm({ account, onSubmit, isLoading }: ProfileFormProps) 
         </FormField>
       </div>
       {taxEntityType === 'business' && (
-        <Input label="Legal business name" {...register('business_name')} error={errors.business_name?.message} />
+        <Input
+          label="Legal business name"
+          required
+          {...register('business_name', { required: 'Legal business name is required' })}
+          error={errors.business_name?.message}
+        />
       )}
       <div className="rounded-lg border border-line bg-surface-muted p-3 text-sm text-fg-muted">
         Required tax form: <strong className="text-fg">{requiredTaxForm}</strong>. Upload it separately below.
