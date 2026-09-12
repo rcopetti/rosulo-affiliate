@@ -28,7 +28,7 @@ export function KycUploader({ taxStatus, taxEntityType, documents = [], onUpload
     try {
       const url = await viewDocument(document.id);
       setPreviewUrl(url);
-      setPreviewType(document.document_type);
+      setPreviewType(document.content_type);
     } catch {
       toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
     } finally {
