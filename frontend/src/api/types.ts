@@ -19,7 +19,7 @@ export interface AffiliateAccount {
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
   paypal_email?: string | null;
   backup_withholding_required?: boolean;
-  documents?: Document[];
+  documents?: AffiliateDocument[];
 }
 
 export interface Document {

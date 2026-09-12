@@ -17,6 +17,7 @@ router = APIRouter()
 
 
 async def _auth_response(db: AsyncSession, account: AffiliateAccount) -> AuthResponse:
+    await db.refresh(account, ["documents"])
     token = create_access_token(account.id)
     account_out = AffiliateAccountOut.model_validate(account)
     tenant_result = await db.execute(

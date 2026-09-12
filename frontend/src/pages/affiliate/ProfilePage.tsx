@@ -40,6 +40,7 @@ export function ProfilePage() {
         <KycUploader
           taxStatus={account.tax_status}
           taxEntityType={account.tax_entity_type}
+          documents={account.documents}
           onUpload={() => refetch()}
         />
       </Card>
