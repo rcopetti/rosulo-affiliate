@@ -1,0 +1,3 @@
+{% block content %}{% endblock %}{{ "\n\n" }}--
+Rosulo Affiliate — affiliate tracking & payouts
+This is an automated message, please do not reply.
