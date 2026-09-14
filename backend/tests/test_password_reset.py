@@ -91,3 +91,152 @@ async def test_verify_wrong_code_is_generic_error(client: AsyncClient, monkeypat
     v = await _verify(client, "wrong-aff@example.com", _wrong_code(code))
     assert v.status_code == 400
     assert v.json()["detail"] == "invalid_or_expired_code"
+
+
+@pytest.mark.asyncio
+async def test_affiliate_reset_happy_path(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "happy-aff@example.com"
+    await _register_affiliate(client, email)
+    await _request(client, email)
+    v = await _verify(client, email, _last_code(sent))
+    token = v.json()["reset_token"]
+    c = await client.post(
+        f"{BASE}/confirm",
+        json={"email": email, "user_type": "affiliate", "reset_token": token, "new_password": "newpass456"},
+    )
+    assert c.status_code == 200
+    login = await client.post(
+        "/api/v1/auth/affiliate/login", json={"email": email, "password": "newpass456"}
+    )
+    assert login.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_tenant_reset_happy_path(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "reset-admin@example.com"
+    reg = await client.post(
+        "/api/v1/auth/tenant/register",
+        json={"tenant_name": "Reset Corp", "email": email, "password": "oldpass123"},
+    )
+    assert reg.status_code == 200, reg.text
+    await _request(client, email, user_type="tenant")
+    v = await _verify(client, email, _last_code(sent), user_type="tenant")
+    token = v.json()["reset_token"]
+    c = await client.post(
+        f"{BASE}/confirm",
+        json={"email": email, "user_type": "tenant", "reset_token": token, "new_password": "newpass456"},
+    )
+    assert c.status_code == 200
+    login = await client.post(
+        "/api/v1/auth/tenant/login", json={"email": email, "password": "newpass456"}
+    )
+    assert login.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_three_wrong_attempts_locks_and_blocks_resend(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "lock-aff@example.com"
+    await _register_affiliate(client, email)
+    await _request(client, email)
+    real = _last_code(sent)
+    wrong = _wrong_code(real)
+
+    for _ in range(2):
+        v = await _verify(client, email, wrong)
+        assert v.status_code == 400
+        assert v.json()["detail"] == "invalid_or_expired_code"
+
+    v = await _verify(client, email, wrong)
+    assert v.status_code == 400
+    assert v.json()["detail"] == "locked"
+
+    # Even the correct code is dead while locked
+    v = await _verify(client, email, real)
+    assert v.status_code == 400
+    assert v.json()["detail"] == "locked"
+
+    # Request while locked: 200 but no new email
+    await _request(client, email)
+    assert len(sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_request_works_after_lockout_expires(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "unlock-aff@example.com"
+    await _register_affiliate(client, email)
+    await _request(client, email)
+    real = _last_code(sent)
+    wrong = _wrong_code(real)
+    for _ in range(3):
+        await _verify(client, email, wrong)
+
+    async with async_session() as db:
+        await db.execute(
+            update(PasswordResetCode)
+            .where(PasswordResetCode.email == email, PasswordResetCode.user_type == "affiliate")
+            .values(locked_until=now_utc() - timedelta(seconds=1))
+        )
+        await db.commit()
+
+    await _request(client, email)
+    assert len(sent) == 2
+    v = await _verify(client, email, _last_code(sent))
+    assert v.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_expired_code_is_rejected(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "expired-aff@example.com"
+    await _register_affiliate(client, email)
+    await _request(client, email)
+    real = _last_code(sent)
+
+    async with async_session() as db:
+        await db.execute(
+            update(PasswordResetCode)
+            .where(PasswordResetCode.email == email, PasswordResetCode.user_type == "affiliate")
+            .values(expires_at=now_utc() - timedelta(seconds=1))
+        )
+        await db.commit()
+
+    v = await _verify(client, email, real)
+    assert v.status_code == 400
+    assert v.json()["detail"] == "invalid_or_expired_code"
+
+
+@pytest.mark.asyncio
+async def test_resend_invalidates_previous_code(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "resend-aff@example.com"
+    await _register_affiliate(client, email)
+    await _request(client, email)
+    first = _last_code(sent)
+    await _request(client, email)
+    assert len(sent) == 2
+    second = _last_code(sent)
+
+    v = await _verify(client, email, first)
+    if first != second:
+        assert v.status_code == 400
+    v = await _verify(client, email, second)
+    assert v.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_confirm_with_bad_token_fails(client: AsyncClient, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    email = "badtok-aff@example.com"
+    await _register_affiliate(client, email)
+    await _request(client, email)
+    await _verify(client, email, _last_code(sent))
+    c = await client.post(
+        f"{BASE}/confirm",
+        json={"email": email, "user_type": "affiliate", "reset_token": "bogus-token", "new_password": "newpass456"},
+    )
+    assert c.status_code == 400
+    assert c.json()["detail"] == "invalid_or_expired_token"
