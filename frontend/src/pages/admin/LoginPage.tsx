@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { loginAdmin } from '@/api/admin/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -50,6 +50,11 @@ export function AdminLoginPage() {
           <Button type="submit" isLoading={loading} className="w-full">
             Log in
           </Button>
+          <p className="text-center text-sm text-slate-600">
+            <Link to="/admin/forgot-password" className="text-brand-600 hover:underline">
+              Forgot password?
+            </Link>
+          </p>
         </form>
       </Card>
     </div>
