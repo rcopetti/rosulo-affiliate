@@ -55,3 +55,34 @@ export async function fetchMerchants(): Promise<Tenant[]> {
 export async function selectMerchant(tenantId: string): Promise<void> {
   await api.post(`/affiliate/merchants/${tenantId}/select`);
 }
+
+export type ResetUserType = 'affiliate' | 'tenant';
+
+export interface PasswordResetRequestInput {
+  email: string;
+  user_type: ResetUserType;
+}
+
+export interface PasswordResetVerifyInput extends PasswordResetRequestInput {
+  code: string;
+}
+
+export interface PasswordResetConfirmInput extends PasswordResetRequestInput {
+  reset_token: string;
+  new_password: string;
+}
+
+export async function requestPasswordReset(data: PasswordResetRequestInput): Promise<void> {
+  await api.post('/auth/password-reset/request', data);
+}
+
+export async function verifyPasswordResetCode(
+  data: PasswordResetVerifyInput
+): Promise<{ reset_token: string }> {
+  const res = await api.post<{ reset_token: string }>('/auth/password-reset/verify', data);
+  return res.data;
+}
+
+export async function confirmPasswordReset(data: PasswordResetConfirmInput): Promise<void> {
+  await api.post('/auth/password-reset/confirm', data);
+}
