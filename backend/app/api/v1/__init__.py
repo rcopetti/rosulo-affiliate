@@ -13,6 +13,7 @@ from app.api.v1.affiliate import merchants as affiliate_merchants
 from app.api.v1.affiliate import payouts as affiliate_payouts
 from app.api.v1.affiliate import profile as affiliate_profile
 from app.api.v1.auth import affiliate as auth_affiliate
+from app.api.v1.auth import password_reset as auth_password_reset
 from app.api.v1.auth import tenant as auth_tenant
 from app.api.v1.public import events as public_events
 from app.api.v1.public import webhooks as public_webhooks
@@ -21,6 +22,7 @@ router = APIRouter()
 
 router.include_router(auth_affiliate.router, prefix="/auth", tags=["auth"])
 router.include_router(auth_tenant.router, prefix="/auth", tags=["auth"])
+router.include_router(auth_password_reset.router, prefix="/auth/password-reset", tags=["auth"])
 router.include_router(admin_contracts.router, prefix="/admin/affiliates", tags=["admin-contracts"])
 router.include_router(admin_affiliates.router, prefix="/admin/affiliates", tags=["admin-affiliates"])
 router.include_router(admin_payouts.router, prefix="/admin/payouts", tags=["admin-payouts"])

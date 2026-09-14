@@ -71,3 +71,21 @@ async def send_invite_email(invite: AffiliateInvite, tenant_name: str) -> None:
         f"<p>This link expires on {invite.expires_at.isoformat() if invite.expires_at else 'N/A'}.</p>"
     )
     await send_email(invite.email, subject, body_text, body_html)
+
+
+async def send_password_reset_code(to: str, code: str) -> None:
+    if not settings.email_from:
+        logger.warning("email_from is not configured; skipping password reset email to %s", to)
+        return
+    subject = "Your Rosulo Affiliate password reset code"
+    body_text = (
+        f"Hi,\n\n"
+        f"Your password reset code is: {code}\n\n"
+        f"It expires in 5 minutes. If you did not request a password reset, ignore this email.\n"
+    )
+    body_html = (
+        f"<p>Hi,</p>"
+        f"<p>Your password reset code is: <strong>{code}</strong></p>"
+        f"<p>It expires in 5 minutes. If you did not request a password reset, ignore this email.</p>"
+    )
+    await send_email(to, subject, body_text, body_html)

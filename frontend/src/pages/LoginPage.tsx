@@ -50,6 +50,11 @@ export function LoginPage() {
           <p className="text-center text-sm text-slate-600">
             Don't have an account? <Link to="/register" className="text-brand-600 hover:underline">Register</Link>
           </p>
+          <p className="text-center text-sm text-slate-600">
+            <Link to="/forgot-password" className="text-brand-600 hover:underline">
+              Forgot password?
+            </Link>
+          </p>
         </form>
       </Card>
     </div>
