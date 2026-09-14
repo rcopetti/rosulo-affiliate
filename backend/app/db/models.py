@@ -260,3 +260,17 @@ class PayoutCommission(Base):
 
     payout = relationship("Payout", back_populates="payout_commissions")
     commission = relationship("Commission", back_populates="payout_commissions")
+
+
+class PasswordResetCode(Base):
+    __tablename__ = "password_reset_codes"
+    __table_args__ = (UniqueConstraint("email", "user_type"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String, nullable=False, index=True)
+    user_type = Column(String, nullable=False)
+    code_hash = Column(String, nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    reset_token_hash = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
