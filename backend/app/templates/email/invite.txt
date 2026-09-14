@@ -1,0 +1,9 @@
+{% extends "base.txt" %}
+{% block content %}Hi,
+
+You have been invited to join {{ tenant_name }} as an affiliate on Rosulo Affiliate.
+
+Accept your invitation:
+{{ invite_url }}
+
+This invitation expires on {{ expires_at }}.{% endblock %}
