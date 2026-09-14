@@ -1,4 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from typing import Literal
+
+from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.affiliate_account import AffiliateAccountOut
 from app.schemas.tenant import TenantOut
@@ -67,3 +69,21 @@ class TenantRegisterResponse(BaseModel):
     tenant: TenantOut
     user: TenantUserOut
     api_key: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    user_type: Literal["tenant", "affiliate"]
+
+
+class PasswordResetVerify(PasswordResetRequest):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class PasswordResetVerifyResponse(BaseModel):
+    reset_token: str
+
+
+class PasswordResetConfirm(PasswordResetRequest):
+    reset_token: str
+    new_password: str = Field(min_length=8)
