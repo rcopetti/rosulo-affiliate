@@ -1,7 +1,8 @@
 # Tenant-Scoped Event Idempotency
 
-**Date:** 2026-09-30  
-**Status:** Approved design; pending implementation
+**Date:** 2026-09-30
+
+**Status:** Implemented; verification complete
 
 ## Goal
 

@@ -20,14 +20,14 @@
 
 ## Test Database Safety Gate
 
-`backend/tests/conftest.py` configures the test database and calls `Base.metadata.drop_all()` at session startup. Before running any pytest command below, obtain/verify an explicitly disposable PostgreSQL database and set `TEST_DATABASE_URL` to it. Do not allow the default configured database or any database with retained data to be used. Migration verification must use a separate disposable PostgreSQL database URL in `AFFILIATE_MIGRATION_DATABASE_URL`; never run the migration smoke steps against a production, shared, or data-retaining database.
+`backend/tests/conftest.py` calls `Base.metadata.drop_all()` at session startup. It uses `TEST_DATABASE_URL` when set; otherwise it derives a test URL by appending `_test` to `DATABASE_URL`'s database name (the current local name is `rosulo_affiliate_test`). Verify that derived target is disposable before running pytest, and never point it at the dev database itself. Migration verification uses a separate URL derived from `DATABASE_URL` with the `_migration_test` suffix (the current local name is `rosulo_affiliate_migration_test`); do not print or log credentials, and refuse to modify that target if it already exists without explicit approval.
 
 ### Task 1: Add API regression tests
 
 **Files:**
 - Modify: `backend/tests/test_events.py`
 
-- [ ] **Step 1: Add the cross-tenant API test**
+- [x] **Step 1: Add the cross-tenant API test**
 
 Add these imports to `backend/tests/test_events.py`:
 
@@ -130,9 +130,9 @@ async def test_event_idempotency_is_scoped_to_tenant(
     assert count == 2
 ```
 
-- [ ] **Step 2: Run the new test and confirm the expected failure**
+- [x] **Step 2: Run the new test and confirm the expected failure**
 
-Run from `backend/`, with `TEST_DATABASE_URL` set to the approved disposable test database:
+Run from `backend/`, using an approved disposable test database, either explicitly via `TEST_DATABASE_URL` or via the repository's `<DATABASE_URL database>_test` fallback:
 
 ```bash
 uv run pytest tests/test_events.py::test_event_idempotency_is_scoped_to_tenant -v
@@ -140,7 +140,7 @@ uv run pytest tests/test_events.py::test_event_idempotency_is_scoped_to_tenant -
 
 Expected before the fix: FAIL because tenant B receives the already-stored tenant A event (tenant ID/customer ID are wrong and only one row exists). Do not proceed if the command targets an unverified database.
 
-- [ ] **Step 3: Extend the existing sale test to assert retry idempotency**
+- [x] **Step 3: Extend the existing sale test to assert retry idempotency**
 
 In `test_event_ingestion`, keep the existing invite/campaign setup and replace the inline sale payload with a reusable payload; send it twice and assert the response ID is unchanged. After both requests, assert exactly one commission is associated with that event:
 
@@ -183,9 +183,9 @@ Add `import uuid` to the test module imports. Replace the inline sale payload an
     assert commission_count == 1
 ```
 
-- [ ] **Step 4: Re-run the focused event tests before implementation**
+- [x] **Step 4: Re-run the focused event tests before implementation**
 
-Run from `backend/` with the approved disposable `TEST_DATABASE_URL`:
+Run from `backend/` using the approved disposable test database, either explicitly via `TEST_DATABASE_URL` or via the repository's `<DATABASE_URL database>_test` fallback:
 
 ```bash
 uv run pytest tests/test_events.py -v
@@ -201,7 +201,7 @@ Expected before implementation: the cross-tenant test fails; the existing event 
 - Create: `backend/alembic/versions/c2d3e4f5a6b7_tenant_scoped_event_idempotency.py`
 - Test: `backend/tests/test_events.py`
 
-- [ ] **Step 1: Add the composite constraint to the ORM model**
+- [x] **Step 1: Add the composite constraint to the ORM model**
 
 In `Event` in `backend/app/db/models.py`, add the named table constraint and remove `unique=True, index=True` from `event_id`:
 
@@ -221,7 +221,7 @@ class Event(Base):
 
 Leave the rest of the model unchanged.
 
-- [ ] **Step 2: Scope the service lookup to the tenant and event ID**
+- [x] **Step 2: Scope the service lookup to the tenant and event ID**
 
 Replace the existing lookup in `backend/app/services/event.py` with:
 
@@ -236,7 +236,7 @@ Replace the existing lookup in `backend/app/services/event.py` with:
 
 Keep the existing return of `existing` and all event validation/creation behavior unchanged.
 
-- [ ] **Step 3: Add the Alembic revision**
+- [x] **Step 3: Add the Alembic revision**
 
 Create `backend/alembic/versions/c2d3e4f5a6b7_tenant_scoped_event_idempotency.py` with the current head as its parent. Upgrade removes the global index and adds the composite unique constraint. Downgrade checks for cross-tenant duplicate external IDs before restoring global uniqueness:
 
@@ -286,9 +286,9 @@ def downgrade() -> None:
     op.create_index("ix_events_event_id", "events", ["event_id"], unique=True)
 ```
 
-- [ ] **Step 4: Run focused event and tracking tests**
+- [x] **Step 4: Run focused event and tracking tests**
 
-Run from `backend/` with the approved disposable `TEST_DATABASE_URL`:
+Run from `backend/` using the approved disposable test database, either explicitly via `TEST_DATABASE_URL` or via the repository's `<DATABASE_URL database>_test` fallback:
 
 ```bash
 uv run pytest tests/test_events.py tests/test_tracking.py -v
@@ -296,7 +296,7 @@ uv run pytest tests/test_events.py tests/test_tracking.py -v
 
 Expected: PASS, including the new tenant-isolation assertion, same-tenant retry, and existing tracking flow.
 
-- [ ] **Step 5: Commit the implementation change set**
+- [x] **Step 5: Commit the implementation change set**
 
 After focused tests pass, inspect and commit only the four implementation files:
 
@@ -311,7 +311,7 @@ git commit -m "Scope event idempotency to tenant"
 - Verify: `backend/alembic/versions/c2d3e4f5a6b7_tenant_scoped_event_idempotency.py`
 - Verify: `backend/tests/test_events.py`, `backend/tests/test_tracking.py`
 
-- [ ] **Step 1: Verify the upgrade preserves existing events on a disposable migration database**
+- [x] **Step 1: Verify the upgrade preserves existing events on a disposable migration database**
 
 Only after confirming `AFFILIATE_MIGRATION_DATABASE_URL` points to a disposable PostgreSQL database, run from `backend/`:
 
@@ -346,7 +346,7 @@ psql "$AFFILIATE_MIGRATION_DATABASE_URL" -c \
 
 Confirm the event row is unchanged, the constraint query returns `uq_events_tenant_id_event_id`, and the final index query returns no rows.
 
-- [ ] **Step 2: Verify the guarded downgrade with duplicate and non-duplicate data**
+- [x] **Step 2: Verify the guarded downgrade with duplicate and non-duplicate data**
 
 On that same disposable database, insert a second event with the same external `event_id` under tenant B:
 
@@ -370,9 +370,9 @@ psql "$AFFILIATE_MIGRATION_DATABASE_URL" -c \
 
 Do not run these data-changing steps against any shared or data-retaining database.
 
-- [ ] **Step 3: Run the complete backend test suite**
+- [x] **Step 3: Run the complete backend test suite**
 
-Run from `backend/` with `TEST_DATABASE_URL` still explicitly set to the approved disposable test database:
+Run from `backend/` using the approved disposable test database, either explicitly via `TEST_DATABASE_URL` or via the repository's `<DATABASE_URL database>_test` fallback:
 
 ```bash
 uv run pytest tests/ -v
@@ -380,11 +380,11 @@ uv run pytest tests/ -v
 
 Expected: all backend tests pass. If failures occur, stop and report the exact failing tests before broadening scope.
 
-- [ ] **Step 4: Update the roadmap only after all acceptance criteria pass**
+- [x] **Step 4: Update the roadmap only after all acceptance criteria pass**
 
 In `docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md`, check only the completed Workstream 0.1 implementation steps and acceptance status. Do not check or change any other P0/P1/P2 workstream or resolve tax/attribution blockers by assumption.
 
-- [ ] **Step 5: Review final changes**
+- [x] **Step 5: Review final changes**
 
 Run:
 
