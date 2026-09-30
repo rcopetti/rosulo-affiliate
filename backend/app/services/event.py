@@ -10,7 +10,12 @@ from app.schemas.event import EventCreate
 
 
 async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> Event:
-    existing_result = await db.execute(select(Event).where(Event.event_id == data.event_id))
+    existing_result = await db.execute(
+        select(Event).where(
+            Event.tenant_id == tenant.id,
+            Event.event_id == data.event_id,
+        )
+    )
     existing = existing_result.scalar_one_or_none()
     if existing:
         return existing

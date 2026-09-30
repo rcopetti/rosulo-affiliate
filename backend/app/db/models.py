@@ -170,8 +170,15 @@ class Campaign(Base):
 
 class Event(Base):
     __tablename__ = "events"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "event_id",
+            name="uq_events_tenant_id_event_id",
+        ),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    event_id = Column(String, unique=True, nullable=False, index=True)
+    event_id = Column(String, nullable=False)
     type = Column(String, nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     campaign_id = Column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True)

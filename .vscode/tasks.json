@@ -24,6 +24,16 @@
           "endsPattern": "Local:.*localhost:5173"
         }
       }
+    },
+    {
+      "label": "alembic: upgrade head",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "alembic", "upgrade", "head"],
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": []
     }
   ]
 }

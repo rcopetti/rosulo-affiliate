@@ -18,7 +18,8 @@
       ],
       "envFile": "${workspaceFolder}/backend/.env",
       "justMyCode": false,
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "preLaunchTask": "alembic: upgrade head",
     },
     {
       "name": "Frontend: vite",
