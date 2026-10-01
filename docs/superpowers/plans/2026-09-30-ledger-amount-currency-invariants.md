@@ -302,6 +302,11 @@ async def test_tax_withholding():
 
     non_us = AffiliateAccount(tax_status="non_us_person", backup_withholding_required=False)
     assert apply_tax(non_us, Decimal("100.00"))[1] == Decimal("30.00")
+    assert apply_tax(non_us, Decimal("0.05")) == (
+        Decimal("0.05"),
+        Decimal("0.02"),
+        Decimal("0.03"),
+    )
 ```
 
 - [ ] **Step 4: Run the targeted tests and confirm expected failures**
@@ -353,7 +358,7 @@ Update `backend/app/services/tax.py` to use Decimal rates `Decimal("0.24")`, `De
 
 - [ ] **Step 4: Parse the current tenant payment webhook amount as Decimal**
 
-In `backend/app/services/payment_record.py`, accept Decimal for `amount`. In `backend/app/api/v1/public/webhooks.py`, replace `float(payload.get("amount", 0))` with `decimal_value(payload.get("amount", 0))`. Keep the incoming `PaymentRecord` meaning unchanged in W0.5; Workstream 0.2 will repurpose it for manual merchant-to-affiliate settlement.
+In `backend/app/services/payment_record.py`, accept Decimal for `amount`. In `backend/app/api/v1/public/webhooks.py`, replace `float(payload.get("amount", 0))` with `normalize_provider_amount(payload.get("amount", 0))` so provider amounts are half-up quantized to two decimals before persistence. Keep the incoming `PaymentRecord` meaning unchanged in W0.5; Workstream 0.2 will repurpose it for manual merchant-to-affiliate settlement.
 
 - [ ] **Step 5: Add the Alembic migration in the same change set**
 
@@ -489,7 +494,7 @@ def downgrade() -> None:
 Run from `backend/`:
 
 ```bash
-uv run pytest tests/test_money.py tests/test_money_models.py tests/test_commission.py tests/test_tax.py tests/test_events.py -v
+uv run pytest tests/test_money.py tests/test_money_models.py tests/test_commission.py tests/test_tax.py tests/test_events.py tests/test_payout.py -v
 ```
 
 Expected: PASS; model precision, Decimal commission/tax behavior, and current event ingestion all work on the ORM-created disposable test schema.
