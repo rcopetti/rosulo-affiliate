@@ -1,15 +1,15 @@
 import { Card } from '@/components/ui/Card';
-import { Balance } from '@/api/types';
+import type { CurrencyBalance } from '@/api/types';
 import { formatCurrency } from '@/lib/utils';
 
 /**
  * Secondary balance metrics. The primary KPIs (earned, pending, available, paid)
  * are shown in StatsCards; this section only covers the remaining figures.
  */
-export function BalanceSummary({ balance }: { balance: Balance }) {
+export function BalanceSummary({ balance }: { balance: CurrencyBalance }) {
   const items = [
     { label: 'Tax retained', value: balance.tax_retained },
-    { label: 'Debt', value: balance.debt },
+    { label: 'Reversal total', value: balance.reversal_total },
   ];
   return (
     <div className="grid gap-4 sm:grid-cols-2">

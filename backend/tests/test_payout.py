@@ -87,14 +87,54 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
         },
     )
 
+    eur_sale = await client.post(
+        "/api/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "event_id": "payout-sale-eur",
+            "type": "sale",
+            "campaign_id": campaign_id,
+            "customer_id": "cust-eur",
+            "amount": 100.0,
+            "currency": "EUR",
+            "payment_sequence": 1,
+            "good_date": str(date.today()),
+            "payment_record_id": "payout-pay-eur",
+        },
+    )
+    assert eur_sale.status_code == 200
+    await client.post(
+        "/api/v1/webhooks/tenant",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "payment_record_id": "payout-pay-eur",
+            "customer_id": "cust-eur",
+            "amount": 100.0,
+            "currency": "EUR",
+            "sequence_number": 1,
+            "status": "paid",
+        },
+    )
+
     # request payout
     req = await client.post(
         "/api/v1/affiliate/payout-requests",
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+        json={"currency": "USD"},
     )
     assert req.status_code == 200
     assert req.json()["status"] == "pending_approval"
+    assert req.json()["currency"] == "USD"
+    assert req.json()["requested_amount"] == 10.0
     payout_id = req.json()["id"]
+
+    commissions = await client.get(
+        "/api/v1/affiliate/commissions",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+    )
+    by_currency = {commission["currency"]: commission for commission in commissions.json()}
+    assert by_currency["USD"]["status"] == "pending"
+    assert by_currency["EUR"]["status"] == "available"
 
     # approve payout
     aprv = await client.post(

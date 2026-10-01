@@ -38,7 +38,6 @@ def build_balances(rows) -> list[dict]:
         {
             "currency": currency,
             **amounts,
-            "debt": amounts["reversal_total"],
         }
         for currency, amounts in sorted(balances.items())
     ]
@@ -62,6 +61,7 @@ def add_legacy_balance_fields(balances: list[dict]) -> dict:
     response = {"balances_by_currency": balances}
     if len(balances) == 1:
         response.update(balances[0])
+        response["debt"] = balances[0]["reversal_total"]
     elif not balances:
         response.update(
             {

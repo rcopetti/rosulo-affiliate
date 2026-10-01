@@ -676,7 +676,7 @@ Create `backend/tests/test_balance.py`:
 ```python
 from decimal import Decimal
 
-from app.services.balance import build_balances
+from app.services.balance import add_legacy_balance_fields, build_balances
 
 
 def test_build_balances_groups_currencies_and_keeps_reversal_separate():
@@ -698,7 +698,7 @@ def test_build_balances_groups_currencies_and_keeps_reversal_separate():
     assert by_currency["USD"]["paid"] == Decimal("20.00")
     assert by_currency["USD"]["reversed"] == Decimal("-3.00")
     assert by_currency["USD"]["reversal_total"] == Decimal("3.00")
-    assert by_currency["USD"]["debt"] == Decimal("3.00")
+    assert add_legacy_balance_fields([by_currency["USD"]])["debt"] == Decimal("3.00")
     assert by_currency["EUR"]["earned"] == Decimal("7.00")
     assert by_currency["EUR"]["available"] == Decimal("7.00")
 ```
@@ -803,7 +803,6 @@ def build_balances(rows) -> list[dict]:
         {
             "currency": currency,
             **amounts,
-            "debt": amounts["reversal_total"],
         }
         for currency, amounts in sorted(balances.items())
     ]
@@ -830,6 +829,7 @@ def add_legacy_balance_fields(balances: list[dict]) -> dict:
     response = {"balances_by_currency": balances}
     if len(balances) == 1:
         response.update(balances[0])
+        response["debt"] = balances[0]["reversal_total"]
     elif not balances:
         response.update(
             {
@@ -969,11 +969,11 @@ const balance: Balance = {
   balances_by_currency: [
     {
       currency: 'USD', earned: 10, pending: 1, available: 2, paid: 7,
-      reversed: 0, tax_retained: 0, reversal_total: 0, debt: 0,
+      tax_retained: 0, reversal_total: 0,
     },
     {
       currency: 'EUR', earned: 20, pending: 3, available: 4, paid: 13,
-      reversed: 0, tax_retained: 0, reversal_total: 0, debt: 0,
+      tax_retained: 0, reversal_total: 0,
     },
   ],
   earned: null,
@@ -1020,10 +1020,8 @@ export interface CurrencyBalance {
   pending: number;
   available: number;
   paid: number;
-  reversed: number;
   tax_retained: number;
   reversal_total: number;
-  debt: number;
 }
 
 export interface Balance {
@@ -1057,10 +1055,8 @@ export function CurrencyBalances({ balance }: { balance: Balance }) {
           pending: balance.pending ?? 0,
           available: balance.available ?? 0,
           paid: balance.paid ?? 0,
-          reversed: balance.reversed ?? 0,
           tax_retained: balance.tax_retained ?? 0,
           reversal_total: balance.reversal_total ?? 0,
-          debt: balance.debt ?? 0,
         },
       ];
 
@@ -1069,6 +1065,7 @@ export function CurrencyBalances({ balance }: { balance: Balance }) {
       {currencies.map((currencyBalance: CurrencyBalance) => (
         <section
           key={currencyBalance.currency}
+          className="space-y-4"
           aria-labelledby={`balance-${currencyBalance.currency}`}
         >
           <h2 id={`balance-${currencyBalance.currency}`} className="text-lg font-semibold">
@@ -1107,8 +1104,8 @@ Expected: all Vitest tests pass and TypeScript/Vite build succeeds.
 - [ ] **Step 8: Commit currency-scoped payout requests and frontend views**
 
 ```bash
-git add backend/app/schemas/payout.py backend/app/api/v1/affiliate/payouts.py backend/app/services/payout.py backend/tests/test_payout.py frontend/src/api/types.ts frontend/src/api/affiliate/payouts.ts frontend/src/components/affiliate/BalanceSummary.tsx frontend/src/components/affiliate/SalesBySequenceChart.tsx frontend/src/components/admin/CommissionLiability.tsx frontend/src/pages/affiliate/BalancePage.tsx frontend/src/pages/affiliate/RequestPayoutPage.tsx frontend/src/pages/affiliate/DashboardPage.tsx frontend/src/components/affiliate/CurrencyBalances.tsx frontend/src/tests/components/CurrencyBalances.test.tsx
-git commit -m "Scope payout requests and balances by currency"
+git add backend/app/schemas/dashboard.py backend/app/schemas/payout.py backend/app/services/balance.py backend/app/api/v1/affiliate/payouts.py backend/app/services/payout.py backend/tests/test_balance.py backend/tests/test_dashboard.py backend/tests/test_payout.py frontend/src/api/types.ts frontend/src/api/affiliate/payouts.ts frontend/src/components/affiliate/BalanceSummary.tsx frontend/src/components/affiliate/SalesBySequenceChart.tsx frontend/src/components/admin/CommissionLiability.tsx frontend/src/pages/affiliate/BalancePage.tsx frontend/src/pages/affiliate/RequestPayoutPage.tsx frontend/src/pages/affiliate/DashboardPage.tsx frontend/src/components/affiliate/CurrencyBalances.tsx frontend/src/tests/components/CurrencyBalances.test.tsx docs/superpowers/specs/2026-09-30-ledger-amount-currency-invariants-design.md docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
+git commit -m "Scope currency payout and balance views"
 ```
 
 ### Task 7: Verify the Alembic migration on a disposable database

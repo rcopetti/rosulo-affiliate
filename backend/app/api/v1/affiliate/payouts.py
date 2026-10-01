@@ -13,10 +13,11 @@ router = APIRouter()
 
 @router.post("/payout-requests", response_model=PayoutOut)
 async def request_payout(
+    data: PayoutRequest,
     affiliate: Affiliate = Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
-    return await payout_service.request_payout(db, affiliate)
+    return await payout_service.request_payout(db, affiliate, data.currency)
 
 
 @router.get("/payouts", response_model=list[PayoutOut])

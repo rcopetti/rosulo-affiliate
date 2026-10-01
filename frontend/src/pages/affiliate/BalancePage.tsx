@@ -2,9 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getBalance } from '@/api/affiliate/balance';
 import { getCommissions } from '@/api/affiliate/commissions';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
-import { BalanceSummary } from '@/components/affiliate/BalanceSummary';
 import { CommissionsTable } from '@/components/affiliate/CommissionsTable';
-import { formatCurrency } from '@/lib/utils';
+import { CurrencyBalances } from '@/components/affiliate/CurrencyBalances';
 
 export function BalancePage() {
   const { data: balance, isLoading } = useQuery({ queryKey: ['affiliate-balance'], queryFn: getBalance });
@@ -17,12 +16,7 @@ export function BalancePage() {
         <p className="text-slate-600">Loading balance…</p>
       ) : (
         <>
-          <BalanceSummary balance={balance} />
-          <Card>
-            <CardHeader>
-              <CardTitle>Available to request: {formatCurrency(balance.available, balance.currency)}</CardTitle>
-            </CardHeader>
-          </Card>
+          <CurrencyBalances balance={balance} />
           <Card>
             <CardHeader>
               <CardTitle>Commissions</CardTitle>

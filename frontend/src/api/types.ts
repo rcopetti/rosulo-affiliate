@@ -113,14 +113,27 @@ export interface Payout {
   commissions?: Commission[];
 }
 
-export interface Balance {
+export interface CurrencyBalance {
+  currency: string;
   earned: number;
   pending: number;
   available: number;
   paid: number;
   tax_retained: number;
-  debt: number;
-  currency: string;
+  reversal_total: number;
+}
+
+export interface Balance {
+  balances_by_currency: CurrencyBalance[];
+  earned: number | null;
+  pending: number | null;
+  available: number | null;
+  paid: number | null;
+  reversed: number | null;
+  tax_retained: number | null;
+  reversal_total: number | null;
+  debt: number | null;
+  currency: string | null;
 }
 
 export interface Event {
@@ -133,6 +146,7 @@ export interface Event {
   customer_id?: string;
   amount?: number;
   currency?: string;
+  commission_status?: 'currency_unsupported' | null;
   payment_sequence?: number;
   good_date?: string;
   referer?: string;
@@ -149,7 +163,7 @@ export interface PaginatedEvents {
 
 export interface Dashboard {
   lead_volume: { bucket: string; count: number }[];
-  sales_by_sequence: { sequence: number; count: number; amount: number }[];
+  sales_by_sequence: { sequence: number; count: number; amount: number; currency: string }[];
   balance: Balance;
 }
 
@@ -164,6 +178,6 @@ export interface PendingInvite {
 export interface AdminDashboard {
   campaign_performance: { campaign_id: string; name: string; clicks: number; leads: number; sales: number }[];
   affiliates: Affiliate[];
-  commission_liability: { period: string; gross: number; tax_retained: number }[];
+  commission_liability: { period: string; gross: number; tax_retained: number; currency: string }[];
   payout_queue: Payout[];
 }

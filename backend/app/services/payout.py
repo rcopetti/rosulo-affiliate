@@ -1,14 +1,21 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.money import is_supported_currency, normalize_currency_code, quantize_ledger_amount
 from app.db.models import Affiliate, Commission, Payout, PayoutCommission, Tenant
 
 
-async def request_payout(db: AsyncSession, affiliate: Affiliate) -> Payout:
+async def request_payout(
+    db: AsyncSession, affiliate: Affiliate, currency: str
+) -> Payout:
+    currency = normalize_currency_code(currency)
+    if not is_supported_currency(currency):
+        raise HTTPException(status_code=400, detail="No available commissions")
     if not affiliate.kyc_approved_for_payout:
         raise HTTPException(status_code=403, detail="KYC not approved")
 
@@ -16,15 +23,22 @@ async def request_payout(db: AsyncSession, affiliate: Affiliate) -> Payout:
         select(Commission).where(
             Commission.affiliate_id == affiliate.id,
             Commission.status == "available",
+            Commission.currency == currency,
         )
     )
     commissions = result.scalars().all()
     if not commissions:
         raise HTTPException(status_code=400, detail="No available commissions")
 
-    gross = sum(c.gross_amount for c in commissions)
-    withholding = sum(c.withholding_amount for c in commissions)
-    net = sum(c.net_amount for c in commissions)
+    gross = quantize_ledger_amount(
+        sum((c.gross_amount for c in commissions), Decimal("0.00")), currency
+    )
+    withholding = quantize_ledger_amount(
+        sum((c.withholding_amount for c in commissions), Decimal("0.00")), currency
+    )
+    net = quantize_ledger_amount(
+        sum((c.net_amount for c in commissions), Decimal("0.00")), currency
+    )
 
     payout = Payout(
         affiliate_id=affiliate.id,
@@ -33,7 +47,7 @@ async def request_payout(db: AsyncSession, affiliate: Affiliate) -> Payout:
         approved_amount=gross,
         withholding_total=withholding,
         net_paid=net,
-        currency="USD",
+        currency=currency,
         status="pending_approval",
     )
     db.add(payout)

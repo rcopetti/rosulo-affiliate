@@ -10,10 +10,8 @@ class CurrencyBalanceOut(BaseModel):
     pending: float
     available: float
     paid: float
-    reversed: float
     tax_retained: float
     reversal_total: float
-    debt: float
 
 
 class BalanceOut(BaseModel):

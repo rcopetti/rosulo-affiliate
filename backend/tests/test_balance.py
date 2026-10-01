@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.services.balance import build_balances
+from app.services.balance import add_legacy_balance_fields, build_balances
 
 
 def test_build_balances_groups_currencies_and_keeps_reversal_separate():
@@ -21,6 +21,6 @@ def test_build_balances_groups_currencies_and_keeps_reversal_separate():
     assert by_currency["USD"]["available"] == Decimal("5.00")
     assert by_currency["USD"]["paid"] == Decimal("20.00")
     assert by_currency["USD"]["reversal_total"] == Decimal("3.00")
-    assert by_currency["USD"]["debt"] == Decimal("3.00")
+    assert add_legacy_balance_fields([by_currency["USD"]])["debt"] == Decimal("3.00")
     assert by_currency["EUR"]["earned"] == Decimal("7.00")
     assert by_currency["EUR"]["available"] == Decimal("7.00")
