@@ -1,15 +1,17 @@
 import datetime
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
-    JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -99,12 +101,13 @@ class Affiliate(Base):
         UUID(as_uuid=True), ForeignKey("affiliate_accounts.id"), nullable=False
     )
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    kyc_approved_for_payout = Column(Boolean, default=False)
+    legacy_kyc_approved_for_payout = Column("kyc_approved_for_payout", Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     account = relationship("AffiliateAccount", back_populates="affiliates")
     campaigns = relationship("Campaign", back_populates="affiliate")
+    documents = relationship("AffiliateDocument", back_populates="affiliate")
     commissions = relationship("Commission", back_populates="affiliate")
     payouts = relationship("Payout", back_populates="affiliate")
     contracts = relationship("Contract", back_populates="affiliate")
@@ -116,13 +119,48 @@ class AffiliateDocument(Base):
     affiliate_account_id = Column(
         UUID(as_uuid=True), ForeignKey("affiliate_accounts.id"), nullable=False
     )
+    affiliate_id = Column(
+        UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=True, index=True
+    )
     document_type = Column(String, nullable=False)
     document_url = Column(String, nullable=False)  # private S3 object key
     content_type = Column(String, nullable=False, default="application/octet-stream")
     file_size = Column(Integer, nullable=False, default=0)
-    approved = Column(Boolean, default=False)
+    legacy_approved = Column("approved", Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     account = relationship("AffiliateAccount", back_populates="documents")
+    affiliate = relationship("Affiliate", back_populates="documents")
+    review_decisions = relationship(
+        "AffiliateDocumentReview",
+        back_populates="document",
+        order_by="(AffiliateDocumentReview.reviewed_at, AffiliateDocumentReview.id)",
+    )
+
+
+class AffiliateDocumentReview(Base):
+    __tablename__ = "affiliate_document_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('approved', 'rejected')",
+            name="ck_affiliate_document_reviews_status",
+        ),
+        CheckConstraint(
+            "status != 'rejected' OR "
+            "(rejection_reason IS NOT NULL AND length(trim(rejection_reason)) > 0)",
+            name="ck_affiliate_document_reviews_rejection_reason",
+        ),
+    )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(
+        UUID(as_uuid=True), ForeignKey("affiliate_documents.id"), nullable=False, index=True
+    )
+    reviewer_id = Column(UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=False)
+    status = Column(String, nullable=False)
+    rejection_reason = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    document = relationship("AffiliateDocument", back_populates="review_decisions")
+    reviewer = relationship("TenantUser")
 
 
 class Contract(Base):
@@ -143,8 +181,8 @@ class Term(Base):
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=False)
     payment_sequence = Column(Integer, nullable=True)
     sequence_pattern = Column(String, nullable=False, default="*")
-    commission_percent = Column(Float, nullable=False)
-    minimum_threshold = Column(Float, nullable=True)
+    commission_percent = Column(Numeric(9, 6), nullable=False)
+    minimum_threshold = Column(Numeric(20, 2), nullable=True)
     effective_from = Column(Date, default=lambda: datetime.date.today())
     effective_to = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
@@ -185,8 +223,9 @@ class Event(Base):
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=True)
     customer_id = Column(String, nullable=True)
     customer_email = Column(String, nullable=True)
-    amount = Column(Float, default=0.0)
+    amount = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
+    commission_status = Column(String, nullable=True)
     payment_sequence = Column(Integer, default=1)
     good_date = Column(Date, nullable=True)
     payment_record_id = Column(String, nullable=True)
@@ -207,7 +246,7 @@ class PaymentRecord(Base):
     tenant_payment_id = Column(String, nullable=False, index=True)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     customer_id = Column(String, nullable=True)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(20, 2), nullable=False)
     currency = Column(String, default="USD")
     paid_at = Column(DateTime(timezone=True), default=now_utc)
     sequence_number = Column(Integer, default=1)
@@ -221,9 +260,9 @@ class Commission(Base):
     event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
     campaign_id = Column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True)
-    gross_amount = Column(Float, default=0.0)
-    withholding_amount = Column(Float, default=0.0)
-    net_amount = Column(Float, default=0.0)
+    gross_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    withholding_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    net_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     status = Column(String, default="pending")
     available_on = Column(Date, nullable=True)
@@ -240,11 +279,11 @@ class Payout(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    requested_amount = Column(Float, default=0.0)
-    approved_amount = Column(Float, default=0.0)
-    withholding_total = Column(Float, default=0.0)
-    paypal_fees = Column(Float, default=0.0)
-    net_paid = Column(Float, default=0.0)
+    requested_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    approved_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    withholding_total = Column(Numeric(20, 2), default=Decimal("0.00"))
+    paypal_fees = Column(Numeric(20, 2), default=Decimal("0.00"))
+    net_paid = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     paypal_batch_id = Column(String, nullable=True)
     status = Column(String, default="requested")
@@ -263,7 +302,7 @@ class PayoutCommission(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
     commission_id = Column(UUID(as_uuid=True), ForeignKey("commissions.id"), nullable=False)
-    amount = Column(Float, default=0.0)
+    amount = Column(Numeric(20, 2), default=Decimal("0.00"))
 
     payout = relationship("Payout", back_populates="payout_commissions")
     commission = relationship("Commission", back_populates="payout_commissions")

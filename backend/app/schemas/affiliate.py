@@ -18,13 +18,32 @@ class AffiliateCreate(BaseModel):
     backup_withholding_required: bool = False
 
 
+class DocumentReviewerOut(BaseModel):
+    id: uuid.UUID
+    name: str | None = None
+    email: str
+
+
+class DocumentReviewOut(BaseModel):
+    status: str
+    reviewed_at: datetime.datetime
+    rejection_reason: str | None = None
+    reviewer: DocumentReviewerOut
+
+
 class AffiliateDocumentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     document_type: str
     content_type: str
-    approved: bool
     created_at: datetime.datetime
+    status: str
+    review_history: list[DocumentReviewOut]
+
+
+class PayoutEligibilityOut(BaseModel):
+    eligible: bool
+    status: str
+    reason: str | None = None
 
 
 class AffiliateOut(BaseModel):
@@ -43,4 +62,4 @@ class AffiliateOut(BaseModel):
     business_name: str | None = None
     tax_form_type: str | None = None
     documents: list[AffiliateDocumentOut] = []
-    kyc_approved_for_payout: bool
+    payout_eligibility: PayoutEligibilityOut

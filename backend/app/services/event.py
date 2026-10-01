@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.money import normalize_currency_code, normalize_provider_amount
 from app.db.models import Campaign, Event, PaymentRecord, Tenant
 from app.schemas.event import EventCreate
 
@@ -89,8 +90,8 @@ async def ingest_event(db: AsyncSession, tenant: Tenant, data: EventCreate) -> E
         affiliate_id=affiliate_id,
         customer_id=customer_id,
         customer_email=data.customer_email,
-        amount=data.amount,
-        currency=data.currency,
+        amount=normalize_provider_amount(data.amount),
+        currency=normalize_currency_code(data.currency),
         payment_sequence=data.payment_sequence,
         good_date=data.good_date,
         payment_record_id=data.payment_record_id,

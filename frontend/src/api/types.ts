@@ -19,7 +19,6 @@ export interface AffiliateAccount {
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
   paypal_email?: string | null;
   backup_withholding_required?: boolean;
-  documents?: AffiliateDocument[];
 }
 
 export interface Document {
@@ -30,12 +29,34 @@ export interface Document {
   uploaded_at: string;
 }
 
+export type PayoutEligibilityStatus = 'missing' | 'pending' | 'approved' | 'rejected';
+
+export interface PayoutEligibility {
+  eligible: boolean;
+  status: PayoutEligibilityStatus;
+  reason: string | null;
+}
+
+export interface AffiliateDocumentReview {
+  status: 'approved' | 'rejected';
+  reviewed_at: string;
+  rejection_reason: string | null;
+  reviewer: { id: string; name: string | null; email: string };
+}
+
 export interface AffiliateDocument {
   id: string;
   document_type: string;
   content_type: string;
-  approved: boolean;
   created_at: string;
+  status: 'pending' | 'approved' | 'rejected';
+  review_history: AffiliateDocumentReview[];
+}
+
+export interface AffiliateDocumentStatus {
+  required_document_type: string;
+  documents: AffiliateDocument[];
+  payout_eligibility: PayoutEligibility;
 }
 
 export interface Affiliate {
@@ -53,7 +74,7 @@ export interface Affiliate {
   business_name?: string | null;
   tax_form_type?: 'W-9' | 'W-8BEN' | 'W-8BEN-E' | null;
   documents?: AffiliateDocument[];
-  kyc_approved_for_payout: boolean;
+  payout_eligibility: PayoutEligibility;
   enabled: boolean;
   contract?: Contract;
 }
@@ -113,14 +134,27 @@ export interface Payout {
   commissions?: Commission[];
 }
 
-export interface Balance {
+export interface CurrencyBalance {
+  currency: string;
   earned: number;
   pending: number;
   available: number;
   paid: number;
   tax_retained: number;
-  debt: number;
-  currency: string;
+  reversal_total: number;
+}
+
+export interface Balance {
+  balances_by_currency: CurrencyBalance[];
+  earned: number | null;
+  pending: number | null;
+  available: number | null;
+  paid: number | null;
+  reversed: number | null;
+  tax_retained: number | null;
+  reversal_total: number | null;
+  debt: number | null;
+  currency: string | null;
 }
 
 export interface Event {
@@ -133,6 +167,7 @@ export interface Event {
   customer_id?: string;
   amount?: number;
   currency?: string;
+  commission_status?: 'currency_unsupported' | null;
   payment_sequence?: number;
   good_date?: string;
   referer?: string;
@@ -149,7 +184,7 @@ export interface PaginatedEvents {
 
 export interface Dashboard {
   lead_volume: { bucket: string; count: number }[];
-  sales_by_sequence: { sequence: number; count: number; amount: number }[];
+  sales_by_sequence: { sequence: number; count: number; amount: number; currency: string }[];
   balance: Balance;
 }
 
@@ -164,6 +199,6 @@ export interface PendingInvite {
 export interface AdminDashboard {
   campaign_performance: { campaign_id: string; name: string; clicks: number; leads: number; sales: number }[];
   affiliates: Affiliate[];
-  commission_liability: { period: string; gross: number; tax_retained: number }[];
+  commission_liability: { period: string; gross: number; tax_retained: number; currency: string }[];
   payout_queue: Payout[];
 }

@@ -1,8 +1,13 @@
 import { api } from '../client';
-import { AffiliateAccount } from '../types';
+import { AffiliateAccount, AffiliateDocumentStatus } from '../types';
 
 export async function getProfile(): Promise<AffiliateAccount> {
   const res = await api.get<AffiliateAccount>('/affiliate/profile');
+  return res.data;
+}
+
+export async function getAffiliateDocuments(): Promise<AffiliateDocumentStatus> {
+  const res = await api.get<AffiliateDocumentStatus>('/affiliate/documents');
   return res.data;
 }
 

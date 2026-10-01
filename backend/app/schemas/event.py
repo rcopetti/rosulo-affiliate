@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,8 +14,8 @@ class EventCreate(BaseModel):
     lead_id: str | None = None
     customer_id: str | None = None
     customer_email: str | None = None
-    amount: float = 0.0
-    currency: str = "USD"
+    amount: Decimal = Decimal("0.00")
+    currency: str = Field("USD", pattern="^[A-Za-z]{3}$")
     payment_sequence: int = 0
     good_date: date | None = None
     payment_record_id: str | None = None
@@ -36,6 +37,7 @@ class EventOut(BaseModel):
     customer_id: str | None = None
     amount: float
     currency: str
+    commission_status: str | None = None
     payment_sequence: int
     good_date: date | None = None
     payment_record_id: str | None = None

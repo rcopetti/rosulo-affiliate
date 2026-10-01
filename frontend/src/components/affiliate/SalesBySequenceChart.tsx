@@ -6,6 +6,7 @@ interface DataPoint {
   sequence: number;
   count: number;
   amount: number;
+  currency: string;
 }
 
 export function SalesBySequenceChart({ data, currency = 'USD' }: { data: DataPoint[]; currency?: string }) {

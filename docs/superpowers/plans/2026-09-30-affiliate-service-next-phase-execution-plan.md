@@ -121,27 +121,31 @@ Record the decisions in the phase-specific implementation plan and API contract 
 
 **Outcome:** Merchant review, document status, and affiliate payout eligibility use one explicit, auditable source of truth.
 
+**Status:** Complete (2026-10-01; live Alembic upgrade/downgrade verification was skipped at the owner's direction; revision-chain and offline SQL generation checks passed).
+
 **Likely files:**
-- Modify: `backend/app/db/models.py`, `backend/app/services/affiliate.py`, `backend/app/services/affiliate_account.py`
-- Modify: `backend/app/api/v1/admin/affiliates.py`, `backend/app/api/v1/affiliate/profile.py`
-- Modify: `frontend/src/pages/admin/AffiliateDetailPage.tsx`, `frontend/src/pages/affiliate/RequestPayoutPage.tsx`, `frontend/src/components/affiliate/KycUploader.tsx`
-- Create: next Alembic revision under `backend/alembic/versions/`
-- Test: `backend/tests/test_profile.py`, `backend/tests/test_affiliate.py`, relevant frontend page tests
+- Modify: `backend/app/db/models.py`, `backend/app/services/affiliate.py`, `backend/app/services/affiliate_account.py`, `backend/app/services/payout.py`, `backend/app/services/document_review.py`
+- Modify: `backend/app/api/v1/admin/affiliates.py`, `backend/app/api/v1/affiliate/profile.py`, `backend/app/api/v1/affiliate/merchants.py`, `backend/app/api/v1/dependencies.py`
+- Modify: `backend/app/schemas/affiliate.py`, `backend/app/schemas/affiliate_account.py`; create `backend/app/schemas/document_review.py`
+- Modify: `frontend/src/api/admin/affiliates.ts`, `frontend/src/api/affiliate/profile.ts`, `frontend/src/api/types.ts`
+- Modify: `frontend/src/pages/admin/AffiliateDetailPage.tsx`, `frontend/src/pages/admin/AffiliatesPage.tsx`, `frontend/src/pages/admin/DashboardPage.tsx`, `frontend/src/pages/affiliate/ProfilePage.tsx`, `frontend/src/pages/affiliate/RequestPayoutPage.tsx`, `frontend/src/components/affiliate/KycUploader.tsx`, `frontend/src/components/shared/KycStatusBadge.tsx`
+- Create: `backend/alembic/versions/a9b0c1d2e3f4_affiliate_document_review.py`
+- Test: `backend/tests/test_document_review.py`, `backend/tests/test_document_review_migration.py`, `backend/tests/test_payout.py`; `frontend/src/tests/components/KycUploader.test.tsx`, `frontend/src/tests/pages/AffiliateDetailPage.test.tsx`, `frontend/src/tests/pages/RequestPayoutPage.test.tsx`
 
 **Implementation sequence:**
 
-- [ ] Add failing API/UI tests covering no documents, a pending document, an approved document, a rejected document, and per-merchant eligibility.
-- [ ] Define whether each document is reviewed globally or per merchant. Store review state, reviewer, decision time, and rejection reason at the correct scope; avoid inferring document approval from a single affiliate-level boolean.
-- [ ] Update merchant review actions and affiliate status rendering to read/write the same policy state.
-- [ ] Enforce payout eligibility in the backend from that policy state; make the frontend display the backend's decision and reason rather than implementing a different rule.
-- [ ] Align accepted upload types and document requirements with the actual merchant policy. Do not claim identity/business verification if only a tax-form upload is supported.
+- [x] Add failing API/UI tests covering no documents, a pending document, an approved document, a rejected document, and per-merchant eligibility.
+- [x] Define per-merchant document copies. Store append-only review decisions with reviewer, decision time, and rejection reason; preserve legacy account-wide documents without using their booleans for eligibility.
+- [x] Update merchant review actions and affiliate status rendering to read/write the same policy state.
+- [x] Enforce payout eligibility in the backend from that policy state; make the frontend display the backend's decision and reason rather than implementing a different rule.
+- [x] Align accepted upload types and document requirements with the actual merchant policy. Describe this as tax-document review, not general identity/business verification.
 
 **Acceptance criteria:**
 
-- Merchant and affiliate views show consistent document and payout eligibility states.
-- The backend rejects ineligible payout requests even when called outside the UI.
-- Review actions are attributable and rejection reasons are visible to the intended users.
-- Re-uploading a new document does not erase or misrepresent prior review history.
+- [x] Merchant and affiliate views show consistent document and payout eligibility states.
+- [x] The backend rejects ineligible payout requests even when called outside the UI.
+- [x] Review actions are attributable and rejection reasons are visible to the intended users.
+- [x] Re-uploading a new document does not erase or misrepresent prior review history.
 
 ### Workstream 0.4: Enforce onboarding and merchant-role boundaries
 
@@ -180,18 +184,18 @@ Record the decisions in the phase-specific implementation plan and API contract 
 
 **Implementation sequence:**
 
-- [ ] Add failing tests for rounding, fractional commission calculations, negative reversals, and attempts to combine different currencies.
-- [ ] Choose a decimal or integer-minor-unit representation with explicit currency precision; migrate existing values without loss and document the conversion/reconciliation procedure.
-- [ ] Until full multi-currency accounting is available, validate and reject currencies the payout and balance system cannot settle. If multiple currencies are approved, keep every aggregate and payout currency-scoped.
-- [ ] Define balance semantics in API schemas and help text: distinguish lifetime earned (net of reversals) from mutually exclusive pending, available, and paid buckets.
-- [ ] Test the definitions against commission and payout records rather than presenting status labels as interchangeable totals.
+- [x] Add failing tests for rounding, fractional commission calculations, negative reversals, and attempts to combine different currencies.
+- [x] Choose a decimal representation with explicit currency precision and migrate financial columns to Numeric. The user confirmed the existing tables are empty, so data conversion/reconciliation verification was waived as not applicable; no migration upgrade/downgrade was run in this session.
+- [x] Keep every aggregate and payout request currency-scoped; store valid provider currencies outside the ledger allowlist without generating payable commissions.
+- [x] Define balance semantics in API schemas: distinguish lifetime earned (net of reversals) from mutually exclusive pending, available, and paid buckets; expose reversal totals.
+- [x] Test the definitions against commission and payout records rather than presenting status labels as interchangeable totals.
 
 **Acceptance criteria:**
 
 - No aggregate includes amounts from different currencies.
 - Rounding rules are deterministic and covered by tests.
 - Affiliate and merchant balance views reconcile to the same ledger.
-- Status totals, reversal debt, and lifetime earned have documented, non-overlapping meanings.
+- Status totals, reversal totals, and lifetime earned have documented, non-overlapping meanings.
 
 ## 5. P1 — Make Tracking and Reporting Dependable
 

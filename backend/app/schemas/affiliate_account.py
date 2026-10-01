@@ -1,18 +1,8 @@
-import datetime
 import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.services.tax_profile import TaxEntityType, TaxStatus
-
-
-class AffiliateDocumentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    document_type: str
-    content_type: str
-    approved: bool
-    created_at: datetime.datetime
 
 
 class AffiliateAccountBase(BaseModel):
@@ -51,4 +41,3 @@ class AffiliateAccountUpdate(BaseModel):
 class AffiliateAccountOut(AffiliateAccountBase):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-    documents: list[AffiliateDocumentOut] = []

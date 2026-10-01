@@ -7,12 +7,13 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import get_current_affiliate_account
+from app.api.v1.dependencies import get_current_affiliate, get_current_affiliate_account
 from app.core.config import settings
 from app.db.dependencies import get_db
 from app.db.models import AffiliateAccount, AffiliateDocument
 from app.schemas.affiliate_account import AffiliateAccountOut, AffiliateAccountUpdate
 from app.services import affiliate_account as acct_service
+from app.services.document_review import get_document_status
 from app.services.document_storage import get_document
 from app.services.tax_profile import derive_tax_form_type
 
@@ -37,9 +38,10 @@ async def update_profile(
 async def upload_document(
     file: UploadFile = File(...),
     document_type: str = Form(..., alias="type"),
-    account: AffiliateAccount = Depends(get_current_affiliate_account),
+    affiliate=Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
+    account = await db.get(AffiliateAccount, affiliate.affiliate_account_id)
     expected = derive_tax_form_type(account.tax_status, account.tax_entity_type)
     if document_type != expected:
         raise HTTPException(status_code=400, detail=f"Expected document type {expected}")
@@ -49,15 +51,23 @@ async def upload_document(
     if len(content) > settings.documents_max_bytes:
         raise HTTPException(status_code=413, detail="Document exceeds the maximum allowed size")
     document = await acct_service.add_document(
-        db, account, document_type, content, file.content_type
+        db, account, affiliate, document_type, content, file.content_type
     )
     return {"id": str(document.id), "document_type": document.document_type, "status": "pending"}
+
+
+@router.get("/documents")
+async def list_documents(
+    affiliate=Depends(get_current_affiliate),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_document_status(db, affiliate)
 
 
 @router.get("/documents/{document_id}/view")
 async def view_document(
     document_id: str,
-    account: AffiliateAccount = Depends(get_current_affiliate_account),
+    affiliate=Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -66,7 +76,7 @@ async def view_document(
         raise HTTPException(status_code=404, detail="Document not found") from exc
     result = await db.execute(select(AffiliateDocument).where(
         AffiliateDocument.id == parsed_id,
-        AffiliateDocument.affiliate_account_id == account.id,
+        AffiliateDocument.affiliate_id == affiliate.id,
     ))
     document = result.scalar_one_or_none()
     if not document:

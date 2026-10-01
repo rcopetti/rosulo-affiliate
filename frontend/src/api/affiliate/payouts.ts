@@ -6,7 +6,7 @@ export async function getPayouts(): Promise<Payout[]> {
   return res.data;
 }
 
-export async function requestPayout(amount: number): Promise<Payout> {
-  const res = await api.post<Payout>('/affiliate/payout-requests', { amount });
+export async function requestPayout(currency: string): Promise<Payout> {
+  const res = await api.post<Payout>('/affiliate/payout-requests', { currency });
   return res.data;
 }

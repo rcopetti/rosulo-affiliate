@@ -37,7 +37,7 @@ def _pg_dsn(url):
     return f"postgresql://{url.username}{password}@{url.host}{port}/{url.database}"
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_db():
     target_url = make_url(engine.url)
     target_dsn = _pg_dsn(target_url)
@@ -84,13 +84,13 @@ async def setup_db():
     yield
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def tenant():
     async with async_session() as db:
         t = Tenant(name="allbum", api_key_hash=hash_api_key("test-api-key"))
@@ -100,7 +100,7 @@ async def tenant():
         yield t
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def tenant_user(tenant):
     async with async_session() as db:
         u = TenantUser(

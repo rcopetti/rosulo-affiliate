@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PayoutRequest(BaseModel):
-    pass
+    currency: str = Field(..., pattern="^[A-Za-z]{3}$")
 
 
 class PayoutOut(BaseModel):

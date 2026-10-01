@@ -4,14 +4,27 @@ from typing import Any
 from pydantic import BaseModel
 
 
-class BalanceOut(BaseModel):
+class CurrencyBalanceOut(BaseModel):
+    currency: str
     earned: float
     pending: float
     available: float
     paid: float
     tax_retained: float
-    debt: float
-    currency: str
+    reversal_total: float
+
+
+class BalanceOut(BaseModel):
+    balances_by_currency: list[CurrencyBalanceOut]
+    earned: float | None
+    pending: float | None
+    available: float | None
+    paid: float | None
+    reversed: float | None
+    tax_retained: float | None
+    reversal_total: float | None
+    debt: float | None
+    currency: str | None
 
 
 class LeadVolumePoint(BaseModel):
@@ -23,6 +36,7 @@ class SalesBySequencePoint(BaseModel):
     sequence: int
     count: int
     amount: float
+    currency: str
 
 
 class AffiliateDashboardOut(BaseModel):
@@ -44,6 +58,7 @@ class CommissionLiabilityRow(BaseModel):
     period: str
     gross: float
     tax_retained: float
+    currency: str
 
 
 class TenantDashboardOut(BaseModel):

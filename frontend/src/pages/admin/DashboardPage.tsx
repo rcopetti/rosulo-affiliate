@@ -9,8 +9,9 @@ import { CommissionLiability } from '@/components/admin/CommissionLiability';
 import { PayoutQueue } from '@/components/admin/PayoutQueue';
 import { KycStatusBadge } from '@/components/shared/KycStatusBadge';
 import { useToast } from '@/components/ui/Toast';
+import { PayoutEligibilityStatus } from '@/api/types';
 
-const affiliateColumns: Column<{ id: string; name: string; kyc_approved_for_payout: boolean }>[] = [
+const affiliateColumns: Column<{ id: string; name: string; payout_eligibility: { status: PayoutEligibilityStatus } }>[] = [
   {
     key: 'name',
     header: 'Name',
@@ -21,7 +22,7 @@ const affiliateColumns: Column<{ id: string; name: string; kyc_approved_for_payo
   {
     key: 'kyc',
     header: 'Status',
-    render: (a) => <KycStatusBadge approved={a.kyc_approved_for_payout} />,
+    render: (a) => <KycStatusBadge status={a.payout_eligibility.status} />,
     headerClassName: 'w-36',
   },
 ];

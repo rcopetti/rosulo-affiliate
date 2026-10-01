@@ -29,7 +29,7 @@ export function AffiliatesPage() {
               <TableRow>
                 <TableHeader>Name</TableHeader>
                 <TableHeader>Email</TableHeader>
-                <TableHeader>KYC</TableHeader>
+                <TableHeader>Tax document</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -42,7 +42,7 @@ export function AffiliatesPage() {
                   </TableCell>
                   <TableCell>{a.email}</TableCell>
                   <TableCell>
-                    <KycStatusBadge approved={a.kyc_approved_for_payout} />
+                    <KycStatusBadge status={a.payout_eligibility.status} />
                   </TableCell>
                 </TableRow>
               ))}

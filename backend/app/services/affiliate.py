@@ -4,10 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Affiliate, AffiliateAccount, Tenant
+from app.db.models import Affiliate, Tenant
+from app.services.document_review import get_document_status
 
 
-def _affiliate_out(affiliate: Affiliate) -> dict:
+async def _affiliate_out(db: AsyncSession, affiliate: Affiliate) -> dict:
+    document_status = await get_document_status(db, affiliate)
     return {
         "id": affiliate.id,
         "tenant_id": affiliate.tenant_id,
@@ -22,69 +24,28 @@ def _affiliate_out(affiliate: Affiliate) -> dict:
         "tax_entity_type": affiliate.account.tax_entity_type,
         "business_name": affiliate.account.business_name,
         "tax_form_type": affiliate.account.tax_form_type,
-        "documents": [
-            {
-                "id": document.id,
-                "document_type": document.document_type,
-                "content_type": document.content_type,
-                "approved": document.approved,
-                "created_at": document.created_at,
-            }
-            for document in affiliate.account.documents
-        ],
-        "kyc_approved_for_payout": affiliate.kyc_approved_for_payout,
+        "documents": document_status["documents"],
+        "payout_eligibility": document_status["payout_eligibility"],
     }
 
 
 async def list_affiliates(db: AsyncSession, tenant: Tenant):
     result = await db.execute(
         select(Affiliate)
-        .options(selectinload(Affiliate.account).selectinload(AffiliateAccount.documents))
+        .options(selectinload(Affiliate.account))
         .where(Affiliate.tenant_id == tenant.id)
     )
-    return [_affiliate_out(a) for a in result.scalars().all()]
+    return [await _affiliate_out(db, affiliate) for affiliate in result.scalars().all()]
 
 
 async def get_affiliate(db: AsyncSession, affiliate_id: uuid.UUID, tenant: Tenant):
     result = await db.execute(
         select(Affiliate)
-        .options(selectinload(Affiliate.account).selectinload(AffiliateAccount.documents))
+        .options(selectinload(Affiliate.account))
         .where(
             Affiliate.id == affiliate_id,
             Affiliate.tenant_id == tenant.id,
         )
     )
     affiliate = result.scalar_one_or_none()
-    return _affiliate_out(affiliate) if affiliate else None
-
-
-async def approve_affiliate_kyc(db: AsyncSession, affiliate_id: uuid.UUID, tenant: Tenant):
-    result = await db.execute(
-        select(Affiliate).where(
-            Affiliate.id == affiliate_id,
-            Affiliate.tenant_id == tenant.id,
-        )
-    )
-    affiliate = result.scalar_one_or_none()
-    if not affiliate:
-        return None
-    affiliate.kyc_approved_for_payout = True
-    await db.commit()
-    await db.refresh(affiliate)
-    return await get_affiliate(db, affiliate_id, tenant)
-
-
-async def reject_affiliate_kyc(db: AsyncSession, affiliate_id: uuid.UUID, tenant: Tenant):
-    result = await db.execute(
-        select(Affiliate).where(
-            Affiliate.id == affiliate_id,
-            Affiliate.tenant_id == tenant.id,
-        )
-    )
-    affiliate = result.scalar_one_or_none()
-    if not affiliate:
-        return None
-    affiliate.kyc_approved_for_payout = False
-    await db.commit()
-    await db.refresh(affiliate)
-    return await get_affiliate(db, affiliate_id, tenant)
+    return await _affiliate_out(db, affiliate) if affiliate else None
