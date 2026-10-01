@@ -40,7 +40,7 @@ The `Event` model gains a nullable `commission_status` field. Set it to `currenc
 
 ## Currency-scoped balance and payout behavior
 
-`GET /api/v1/affiliate/balance` and affiliate dashboard balance responses gain `balances_by_currency`, containing one entry per currency with `earned`, `pending`, `available`, `paid`, `tax_retained`, and `reversal_total`. Always return this list. Preserve legacy flat values when exactly one currency is present; when multiple currencies are present, set legacy flat amount fields and `currency` to null rather than returning mixed-currency totals. With no commissions, return an empty list and preserve the existing zero-valued USD legacy shape.
+`GET /api/v1/affiliate/balance` and affiliate dashboard balance responses gain `balances_by_currency`, containing one entry per currency with `earned`, `pending`, `available`, `paid`, `tax_retained`, and `reversal_total`. Always return this list. Preserve legacy flat values when exactly one currency is present; when multiple currencies are present, set legacy flat amount fields and `currency` to null rather than returning mixed-currency totals. Preserve the existing signed `reversed` field as a compatibility value; it is the signed sum for the reversed status and is null when currencies are mixed. With no commissions, return an empty list and preserve the existing zero-valued USD legacy shape.
 
 - `earned`: sum of `net_amount` across all commission entries, including signed reversals.
 - `pending`, `available`, `paid`: sum `net_amount` within that exact commission status; the buckets are mutually exclusive.

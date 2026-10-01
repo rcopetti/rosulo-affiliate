@@ -696,21 +696,67 @@ def test_build_balances_groups_currencies_and_keeps_reversal_separate():
     assert by_currency["USD"]["tax_retained"] == Decimal("1.00")
     assert by_currency["USD"]["available"] == Decimal("5.00")
     assert by_currency["USD"]["paid"] == Decimal("20.00")
+    assert by_currency["USD"]["reversed"] == Decimal("-3.00")
     assert by_currency["USD"]["reversal_total"] == Decimal("3.00")
     assert by_currency["USD"]["debt"] == Decimal("3.00")
     assert by_currency["EUR"]["earned"] == Decimal("7.00")
     assert by_currency["EUR"]["available"] == Decimal("7.00")
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+Extend `test_dashboards` after campaign creation with the empty-ledger response, two sales, and the populated balance response:
+
+```python
+    empty_balance = await client.get(
+        "/api/v1/affiliate/balance",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+    )
+    assert empty_balance.status_code == 200
+    assert empty_balance.json()["balances_by_currency"] == []
+    assert empty_balance.json()["currency"] == "USD"
+    assert empty_balance.json()["earned"] == 0
+
+    for event_id, currency in (("dash-sale-usd", "USD"), ("dash-sale-eur", "EUR")):
+        response = await client.post(
+            "/api/v1/events",
+            headers={"X-API-Key": "test-api-key"},
+            json={
+                "event_id": event_id,
+                "type": "sale",
+                "campaign_id": campaign_id,
+                "customer_id": f"customer-{currency.lower()}",
+                "amount": 100.0,
+                "currency": currency,
+                "payment_sequence": 1,
+                "good_date": str(date.today()),
+            },
+        )
+        assert response.status_code == 200
+
+    affiliate_balance = await client.get(
+        "/api/v1/affiliate/balance",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+    )
+    assert affiliate_balance.status_code == 200
+    assert {
+        row["currency"] for row in affiliate_balance.json()["balances_by_currency"]
+    } == {"USD", "EUR"}
+    assert affiliate_balance.json()["earned"] is None
+    assert affiliate_balance.json()["reversed"] is None
+    assert affiliate_balance.json()["currency"] is None
+```
+
+After fetching `a_dash`, assert its `balances_by_currency` contains USD and EUR, its legacy `earned`, `reversed`, and `currency` are null, and sales-by-sequence has separate USD/EUR rows. After fetching `t_dash`, assert commission-liability rows contain separate USD/EUR entries.
+
+- [ ] **Step 2: Run the tests and confirm the expected failures**
 
 Run from `backend/`:
 
 ```bash
 uv run pytest tests/test_balance.py -v
+uv run pytest tests/test_dashboard.py::test_dashboards -v
 ```
 
-Expected: FAIL because the shared balance projection does not exist.
+Expected: the unit test fails to import the missing balance projection, and the API test fails because the balance response has no `balances_by_currency`.
 
 - [ ] **Step 3: Implement the shared Decimal balance projection**
 
@@ -736,6 +782,7 @@ def build_balances(rows) -> list[dict]:
             "pending": ZERO,
             "available": ZERO,
             "paid": ZERO,
+            "reversed": ZERO,
             "tax_retained": ZERO,
             "reversal_total": ZERO,
         }
@@ -747,8 +794,10 @@ def build_balances(rows) -> list[dict]:
         balance["tax_retained"] += withholding or ZERO
         if status in {"pending", "available", "paid"}:
             balance[status] += net_amount
-        if status == "reversed" and net_amount < 0:
-            balance["reversal_total"] += abs(net_amount)
+        if status == "reversed":
+            balance["reversed"] += net_amount
+            if net_amount < 0:
+                balance["reversal_total"] += abs(net_amount)
 
     return [
         {
@@ -785,13 +834,14 @@ def add_legacy_balance_fields(balances: list[dict]) -> dict:
         response.update(
             {
                 "currency": "USD",
-                "earned": 0.0,
-                "pending": 0.0,
-                "available": 0.0,
-                "paid": 0.0,
-                "tax_retained": 0.0,
-                "reversal_total": 0.0,
-                "debt": 0.0,
+                "earned": ZERO,
+                "pending": ZERO,
+                "available": ZERO,
+                "paid": ZERO,
+                "reversed": ZERO,
+                "tax_retained": ZERO,
+                "reversal_total": ZERO,
+                "debt": ZERO,
             }
         )
     else:
@@ -802,6 +852,7 @@ def add_legacy_balance_fields(balances: list[dict]) -> dict:
                 "pending": None,
                 "available": None,
                 "paid": None,
+                "reversed": None,
                 "tax_retained": None,
                 "reversal_total": None,
                 "debt": None,
@@ -818,30 +869,7 @@ Use `get_balances` and `add_legacy_balance_fields` in `/api/v1/affiliate/balance
 
 Group affiliate sales-by-sequence by `(payment_sequence, Commission.currency)` and tenant commission liability by `(month, Commission.currency)`. Add currency fields to `BalanceOut`, `SalesBySequencePoint`, `CommissionLiabilityRow`, `AffiliateDashboardOut`, and `TenantDashboardOut`. Keep all dashboard service aggregation in Decimal; remove `float()` conversions from aggregate/service code and let the Pydantic response models convert at the API boundary.
 
-- [ ] **Step 5: Add API-level grouping assertions and run dashboard tests**
-
-Extend `test_dashboards` after campaign creation to post these sales:
-
-```python
-    for event_id, currency in (("dash-sale-usd", "USD"), ("dash-sale-eur", "EUR")):
-        response = await client.post(
-            "/api/v1/events",
-            headers={"X-API-Key": "test-api-key"},
-            json={
-                "event_id": event_id,
-                "type": "sale",
-                "campaign_id": campaign_id,
-                "customer_id": f"customer-{currency.lower()}",
-                "amount": 100.0,
-                "currency": currency,
-                "payment_sequence": 1,
-                "good_date": str(date.today()),
-            },
-        )
-        assert response.status_code == 200
-```
-
-After fetching `a_dash`, assert `set(row["currency"] for row in a_dash.json()["balance"]["balances_by_currency"]) == {"USD", "EUR"}`, the legacy top-level `earned` and `currency` are `None`, and `sales_by_sequence` contains separate USD/EUR rows. After fetching `t_dash`, assert `commission_liability` has separate USD/EUR rows for the same period.
+- [ ] **Step 5: Run balance and dashboard tests after implementation**
 
 Run from `backend/`:
 
@@ -854,7 +882,7 @@ Expected: PASS for every per-currency balance and dashboard aggregate.
 - [ ] **Step 6: Commit the currency-scoped balance projections**
 
 ```bash
-git add backend/app/services/balance.py backend/app/api/v1/affiliate/balance.py backend/app/services/dashboard.py backend/app/schemas/dashboard.py backend/tests/test_balance.py backend/tests/test_dashboard.py
+git add backend/app/services/balance.py backend/app/api/v1/affiliate/balance.py backend/app/services/dashboard.py backend/app/schemas/dashboard.py backend/tests/test_balance.py backend/tests/test_dashboard.py docs/superpowers/specs/2026-09-30-ledger-amount-currency-invariants-design.md docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
 git commit -m "Group ledger balances by currency"
 ```
 
@@ -941,17 +969,18 @@ const balance: Balance = {
   balances_by_currency: [
     {
       currency: 'USD', earned: 10, pending: 1, available: 2, paid: 7,
-      tax_retained: 0, reversal_total: 0, debt: 0,
+      reversed: 0, tax_retained: 0, reversal_total: 0, debt: 0,
     },
     {
       currency: 'EUR', earned: 20, pending: 3, available: 4, paid: 13,
-      tax_retained: 0, reversal_total: 0, debt: 0,
+      reversed: 0, tax_retained: 0, reversal_total: 0, debt: 0,
     },
   ],
   earned: null,
   pending: null,
   available: null,
   paid: null,
+  reversed: null,
   tax_retained: null,
   reversal_total: null,
   debt: null,
@@ -991,6 +1020,7 @@ export interface CurrencyBalance {
   pending: number;
   available: number;
   paid: number;
+  reversed: number;
   tax_retained: number;
   reversal_total: number;
   debt: number;
@@ -1002,6 +1032,7 @@ export interface Balance {
   pending: number | null;
   available: number | null;
   paid: number | null;
+  reversed: number | null;
   tax_retained: number | null;
   reversal_total: number | null;
   debt: number | null;
@@ -1026,6 +1057,7 @@ export function CurrencyBalances({ balance }: { balance: Balance }) {
           pending: balance.pending ?? 0,
           available: balance.available ?? 0,
           paid: balance.paid ?? 0,
+          reversed: balance.reversed ?? 0,
           tax_retained: balance.tax_retained ?? 0,
           reversal_total: balance.reversal_total ?? 0,
           debt: balance.debt ?? 0,

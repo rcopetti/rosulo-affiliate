@@ -1,29 +1,23 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_current_affiliate
 from app.db.dependencies import get_db
 from app.db.models import Affiliate, Commission
+from app.schemas.dashboard import BalanceOut
+from app.services.balance import add_legacy_balance_fields, get_balances
 
 router = APIRouter()
 
 
-@router.get("/balance")
+@router.get("/balance", response_model=BalanceOut)
 async def get_balance(
     affiliate: Affiliate = Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Commission.status, func.sum(Commission.net_amount))
-        .where(Commission.affiliate_id == affiliate.id)
-        .group_by(Commission.status)
-    )
-    balance = {"earned": 0, "pending": 0, "available": 0, "paid": 0, "reversed": 0}
-    for status, amount in result.all():
-        if status in balance:
-            balance[status] = float(amount or 0)
-    return balance
+    balances = await get_balances(db, affiliate.id)
+    return add_legacy_balance_fields(balances)
 
 
 @router.get("/commissions")

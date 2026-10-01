@@ -1,5 +1,5 @@
-from collections import defaultdict
 from datetime import datetime, timedelta
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -7,34 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Campaign, Commission, Event, Payout
 from app.services import affiliate as affiliate_service
+from app.services.balance import add_legacy_balance_fields, get_balances
 
 
 async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id: UUID | None = None):
-    # Balance
-    result = await db.execute(
-        select(
-            Commission.status,
-            func.sum(Commission.gross_amount),
-            func.sum(Commission.withholding_amount),
-            func.sum(Commission.net_amount),
-        ).where(Commission.affiliate_id == affiliate_id)
-        .group_by(Commission.status)
-    )
-    balance = {
-        "earned": 0.0,
-        "pending": 0.0,
-        "available": 0.0,
-        "paid": 0.0,
-        "reversed": 0.0,
-        "tax_retained": 0.0,
-        "debt": 0.0,
-        "currency": "USD",
-    }
-    for status, gross, withholding, net in result.all():
-        if status in balance:
-            balance[status] = float(gross or 0)
-        balance["tax_retained"] += float(withholding or 0)
-    balance["debt"] = balance["reversed"]
+    balance = add_legacy_balance_fields(await get_balances(db, affiliate_id))
 
     # Leads by day
     since = datetime.utcnow() - timedelta(days=30)
@@ -52,14 +29,24 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
 
     # Sales by sequence
     sales = await db.execute(
-        select(Event.payment_sequence, func.count(Event.id), func.sum(Commission.gross_amount))
+        select(
+            Event.payment_sequence,
+            Commission.currency,
+            func.count(Event.id),
+            func.sum(Commission.gross_amount),
+        )
         .join(Commission, Commission.event_id == Event.id)
         .where(Event.affiliate_id == affiliate_id)
-        .group_by(Event.payment_sequence)
+        .group_by(Event.payment_sequence, Commission.currency)
     )
     sales_by_sequence = [
-        {"sequence": int(seq or 1), "count": int(count), "amount": float(g or 0)}
-        for seq, count, g in sales.all()
+        {
+            "sequence": int(seq or 1),
+            "count": int(count),
+            "amount": amount or Decimal("0.00"),
+            "currency": currency,
+        }
+        for seq, currency, count, amount in sales.all()
     ]
 
     payouts = await db.execute(select(Payout).where(Payout.affiliate_id == affiliate_id))
@@ -117,6 +104,7 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
     liability_result = await db.execute(
         select(
             period_expr,
+            Commission.currency,
             func.sum(Commission.gross_amount).label("gross"),
             func.sum(Commission.withholding_amount).label("tax"),
         )
@@ -125,13 +113,14 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
             Event.tenant_id == tenant_id,
             Commission.status.in_(["available", "pending"]),
         )
-        .group_by(period_expr)
+        .group_by(period_expr, Commission.currency)
     )
     commission_liability = [
         {
             "period": row.period.strftime("%Y-%m") if hasattr(row.period, "strftime") else str(row.period)[:7],
-            "gross": float(row.gross or 0),
-            "tax_retained": float(row.tax or 0),
+            "gross": row.gross or Decimal("0.00"),
+            "tax_retained": row.tax or Decimal("0.00"),
+            "currency": row.currency,
         }
         for row in liability_result.all()
     ]
