@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-30
 
-**Status:** Approved design; pending spec review
+**Status:** Approved design; implementation plan ready
 
 ## Goal
 
@@ -16,7 +16,7 @@ Complete Workstream 0.5 first, then Workstream 0.3 (per-merchant tax-document el
 
 - **Enabled ledger currencies:** USD, EUR, and BRL. Each has two fractional digits. No FX conversion is performed.
 - **Payout currency scope:** A payout request selects one currency and uses commissions in that currency only. No aggregate combines currencies.
-- **Provider currency ingestion:** Preserve the currency code supplied by a provider rather than rejecting an event because it is not currently enabled for affiliate processing. For an unsupported currency, store the event, mark its commission generation state as `currency_unsupported`, and do not create a payable commission. Replaying that event after the currency is enabled may create the commission exactly once.
+- **Provider currency ingestion:** Preserve the provider currency code semantically (normalize it to uppercase) rather than rejecting an event because it is not currently enabled for affiliate processing. For an unsupported currency, store the event, mark its commission generation state as `currency_unsupported`, and do not create a payable commission. Replaying that event after the currency is enabled may create the commission exactly once.
 - **Unknown-currency event scale:** Event amounts remain two-decimal values even when the source currency is not enabled, as explicitly selected for this release.
 - **Rounding:** Use Decimal arithmetic and `ROUND_HALF_UP` at the currency's minor-unit precision. Keep withholding rates and jurisdiction logic unchanged; qualified tax/accounting support must confirm the withholding rounding treatment before production use.
 - **API amounts:** Preserve existing JSON number fields for compatibility. Exact arithmetic and aggregation remain server-side; clients display amounts and do not compute ledger totals.
@@ -57,7 +57,7 @@ The current Alembic head is `c2d3e4f5a6b7`; add the next revision from that head
 
 Review conversion counts and per-currency totals on a disposable representative database before rollout. Tests must cover both supported and unsupported currency event paths. The regular pytest fixture recreates its configured test schema from ORM metadata and does not validate Alembic migrations.
 
-The current `PaymentRecord` remains an incoming customer-payment record during Workstream 0.5. Its eventual repurposing as the merchant-to-affiliate manual payout settlement record, including `payout_id`, payment method, and transfer reference, belongs to Workstream 0.2 as sequenced by the service owner.
+The current `PaymentRecord` remains an incoming customer-payment record during Workstream 0.5. Its existing commission-availability lookup by external payment ID remains unchanged in this workstream and is not a safe production settlement boundary. Workstream 0.2 must replace that lookup with tenant-scoped merchant-to-affiliate payout reconciliation and repurpose the model to include `payout_id`, payment method, and transfer reference.
 
 ## Tests
 
