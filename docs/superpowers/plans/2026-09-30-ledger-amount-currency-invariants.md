@@ -213,19 +213,29 @@ from app.db.models import (
 Add this test:
 
 ```python
-def test_financial_model_columns_use_numeric():
-    assert isinstance(Event.__table__.c.amount.type, Numeric)
-    assert isinstance(PaymentRecord.__table__.c.amount.type, Numeric)
-    assert isinstance(Commission.__table__.c.gross_amount.type, Numeric)
-    assert isinstance(Commission.__table__.c.withholding_amount.type, Numeric)
-    assert isinstance(Commission.__table__.c.net_amount.type, Numeric)
-    assert isinstance(Payout.__table__.c.requested_amount.type, Numeric)
-    assert isinstance(Payout.__table__.c.approved_amount.type, Numeric)
-    assert isinstance(Payout.__table__.c.withholding_total.type, Numeric)
-    assert isinstance(Payout.__table__.c.net_paid.type, Numeric)
-    assert isinstance(PayoutCommission.__table__.c.amount.type, Numeric)
-    assert isinstance(Term.__table__.c.minimum_threshold.type, Numeric)
-    assert isinstance(Term.__table__.c.commission_percent.type, Numeric)
+def test_financial_model_columns_use_expected_numeric_precision():
+    money_columns = (
+        Event.__table__.c.amount,
+        PaymentRecord.__table__.c.amount,
+        Commission.__table__.c.gross_amount,
+        Commission.__table__.c.withholding_amount,
+        Commission.__table__.c.net_amount,
+        Payout.__table__.c.requested_amount,
+        Payout.__table__.c.approved_amount,
+        Payout.__table__.c.withholding_total,
+        Payout.__table__.c.paypal_fees,
+        Payout.__table__.c.net_paid,
+        PayoutCommission.__table__.c.amount,
+        Term.__table__.c.minimum_threshold,
+    )
+    for column in money_columns:
+        assert type(column.type) is Numeric
+        assert column.type.precision == 20
+        assert column.type.scale == 2
+
+    assert type(Term.__table__.c.commission_percent.type) is Numeric
+    assert Term.__table__.c.commission_percent.type.precision == 9
+    assert Term.__table__.c.commission_percent.type.scale == 6
 ```
 
 - [ ] **Step 2: Add a commission half-up regression using the existing integration fixture**
@@ -239,16 +249,16 @@ json={
         {
             "commission_percent": 10.0,
             "payment_sequence": 1,
-            "minimum_threshold": 10.05,
+            "minimum_threshold": 2.05,
         }
     ],
 }
 ```
 
-Change the existing duplicate USD sale payload to `amount: 10.05` and `currency: "USD"`; the existing test posts it twice and asserts there is still one Commission. Change the gross assertion to:
+Change the existing duplicate USD sale payload to `amount: 2.05` and `currency: "USD"`; the existing test posts it twice and asserts there is still one Commission. Change the gross assertion to:
 
 ```python
-assert comms.json()[0]["gross_amount"] == 1.01
+assert comms.json()[0]["gross_amount"] == 0.21
 ```
 
 Then post a distinct EUR sale on the same campaign:
@@ -262,7 +272,7 @@ eur_sale = await client.post(
         "type": "sale",
         "campaign_id": campaign_id,
         "customer_id": "cust-eur",
-        "amount": 10.04,
+        "amount": 2.04,
         "currency": "EUR",
         "payment_sequence": 1,
         "good_date": str(date.today()),
@@ -271,7 +281,7 @@ eur_sale = await client.post(
 assert eur_sale.status_code == 200
 ```
 
-Fetch commissions again and assert there is still only the USD commission. This verifies the minimum threshold is interpreted in the event's own currency without FX conversion. The USD value is `10.05 × 10% = 1.005`, which must round half-up to `1.01`.
+Fetch commissions again and assert there is still only the USD commission. This verifies the minimum threshold is interpreted in the event's own currency without FX conversion. The USD value is `2.05 × 10% = 0.205`; binary-float `round()` yields `0.20`, while half-up Decimal quantization must yield `0.21`.
 
 - [ ] **Step 3: Change the existing tax unit test to use Decimal values**
 
@@ -302,7 +312,7 @@ Run from `backend/` with the approved disposable test database:
 uv run pytest tests/test_money.py tests/test_commission.py tests/test_tax.py -v
 ```
 
-Expected before implementation: ORM assertions fail because the columns are Float; the 10.05 commission does not round to 1.01; Decimal tax inputs are rejected by the float-only calculation.
+Expected before implementation: ORM assertions fail because the columns are Float; the 2.05 sale at 10% yields 0.20 rather than the required half-up 0.21; Decimal tax inputs are rejected by the float-only calculation.
 
 ### Task 3: Convert financial columns and commission calculations to Decimal/Numeric
 
