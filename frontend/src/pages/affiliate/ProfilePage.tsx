@@ -1,12 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getProfile, updateProfile } from '@/api/affiliate/profile';
+import { getAffiliateDocuments, getProfile, updateProfile } from '@/api/affiliate/profile';
 import { ProfileForm } from '@/components/affiliate/ProfileForm';
 import { KycUploader } from '@/components/affiliate/KycUploader';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 
 export function ProfilePage() {
-  const { data: account, isLoading, refetch } = useQuery({ queryKey: ['affiliate-account'], queryFn: getProfile });
+  const { data: account, isLoading } = useQuery({ queryKey: ['affiliate-account'], queryFn: getProfile });
+  const { data: documentStatus, isLoading: documentsLoading, refetch: refetchDocuments } = useQuery({
+    queryKey: ['affiliate-documents'],
+    queryFn: getAffiliateDocuments,
+  });
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -35,13 +39,14 @@ export function ProfilePage() {
           <CardTitle>Tax documents</CardTitle>
         </CardHeader>
         <p className="mb-4 text-sm text-fg-muted">
-          Your required IRS form is determined by your US/foreign status and whether you are an individual or business. Upload it separately for review.
+          Your required IRS form is determined by your US/foreign status and whether you are an individual or business. Upload a separate copy for each merchant; each merchant reviews its own submission.
         </p>
         <KycUploader
-          taxStatus={account.tax_status}
-          taxEntityType={account.tax_entity_type}
-          documents={account.documents}
-          onUpload={() => refetch()}
+          requiredDocumentType={documentStatus?.required_document_type}
+          documents={documentStatus?.documents}
+          payoutEligibility={documentStatus?.payout_eligibility}
+          isLoading={documentsLoading}
+          onUpload={() => refetchDocuments()}
         />
       </Card>
     </div>

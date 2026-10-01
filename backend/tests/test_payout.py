@@ -7,7 +7,7 @@ from app.db.models import Tenant
 
 
 @pytest.mark.asyncio
-async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
+async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, monkeypatch):
     admin_login = await client.post(
         "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
@@ -50,11 +50,27 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user):
     )
     campaign_id = camp.json()["id"]
 
-    # approve KYC
-    await client.post(
-        f"/api/v1/admin/affiliates/{affiliate_id}/approve",
-        headers={"Authorization": f"Bearer {admin_token}"},
+    monkeypatch.setattr(
+        "app.services.affiliate_account.put_document",
+        lambda document_id, content: f"private/{document_id}",
     )
+    affiliate_headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Tenant-Id": str(tenant.id),
+    }
+    uploaded = await client.post(
+        "/api/v1/affiliate/documents",
+        headers=affiliate_headers,
+        data={"type": "W-9"},
+        files={"file": ("w9.pdf", b"tax document", "application/pdf")},
+    )
+    document_id = uploaded.json()["id"]
+    reviewed = await client.post(
+        f"/api/v1/admin/affiliates/{affiliate_id}/documents/{document_id}/review",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"status": "approved"},
+    )
+    assert reviewed.status_code == 200
 
     # sale event with payment record
     await client.post(

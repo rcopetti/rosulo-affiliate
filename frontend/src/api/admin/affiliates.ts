@@ -1,5 +1,5 @@
 import { adminApi } from './client';
-import { Affiliate } from '../types';
+import { Affiliate, AffiliateDocumentStatus } from '../types';
 
 export interface CreateInviteRequest {
   email: string;
@@ -23,8 +23,8 @@ export async function getAffiliates(): Promise<Affiliate[]> {
   return res.data;
 }
 
-export async function getAffiliate(id: string): Promise<Affiliate & { account: { email: string; name: string } }> {
-  const res = await adminApi.get<Affiliate & { account: { email: string; name: string } }>(`/admin/affiliates/${id}`);
+export async function getAffiliate(id: string): Promise<Affiliate> {
+  const res = await adminApi.get<Affiliate>(`/admin/affiliates/${id}`);
   return res.data;
 }
 
@@ -49,10 +49,14 @@ export async function viewAffiliateDocument(affiliateId: string, documentId: str
   return { url: URL.createObjectURL(res.data), contentType: String(res.headers['content-type'] || 'application/octet-stream') };
 }
 
-export async function approveKyc(id: string): Promise<void> {
-  await adminApi.post(`/admin/affiliates/${id}/approve`);
-}
-
-export async function rejectKyc(id: string): Promise<void> {
-  await adminApi.post(`/admin/affiliates/${id}/reject`);
+export async function reviewAffiliateDocument(
+  affiliateId: string,
+  documentId: string,
+  data: { status: 'approved' | 'rejected'; rejection_reason?: string },
+): Promise<AffiliateDocumentStatus> {
+  const res = await adminApi.post<AffiliateDocumentStatus>(
+    `/admin/affiliates/${affiliateId}/documents/${documentId}/review`,
+    data,
+  );
+  return res.data;
 }

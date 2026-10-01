@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -100,12 +101,13 @@ class Affiliate(Base):
         UUID(as_uuid=True), ForeignKey("affiliate_accounts.id"), nullable=False
     )
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    kyc_approved_for_payout = Column(Boolean, default=False)
+    legacy_kyc_approved_for_payout = Column("kyc_approved_for_payout", Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     account = relationship("AffiliateAccount", back_populates="affiliates")
     campaigns = relationship("Campaign", back_populates="affiliate")
+    documents = relationship("AffiliateDocument", back_populates="affiliate")
     commissions = relationship("Commission", back_populates="affiliate")
     payouts = relationship("Payout", back_populates="affiliate")
     contracts = relationship("Contract", back_populates="affiliate")
@@ -117,13 +119,48 @@ class AffiliateDocument(Base):
     affiliate_account_id = Column(
         UUID(as_uuid=True), ForeignKey("affiliate_accounts.id"), nullable=False
     )
+    affiliate_id = Column(
+        UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=True, index=True
+    )
     document_type = Column(String, nullable=False)
     document_url = Column(String, nullable=False)  # private S3 object key
     content_type = Column(String, nullable=False, default="application/octet-stream")
     file_size = Column(Integer, nullable=False, default=0)
-    approved = Column(Boolean, default=False)
+    legacy_approved = Column("approved", Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     account = relationship("AffiliateAccount", back_populates="documents")
+    affiliate = relationship("Affiliate", back_populates="documents")
+    review_decisions = relationship(
+        "AffiliateDocumentReview",
+        back_populates="document",
+        order_by="(AffiliateDocumentReview.reviewed_at, AffiliateDocumentReview.id)",
+    )
+
+
+class AffiliateDocumentReview(Base):
+    __tablename__ = "affiliate_document_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('approved', 'rejected')",
+            name="ck_affiliate_document_reviews_status",
+        ),
+        CheckConstraint(
+            "status != 'rejected' OR "
+            "(rejection_reason IS NOT NULL AND length(trim(rejection_reason)) > 0)",
+            name="ck_affiliate_document_reviews_rejection_reason",
+        ),
+    )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(
+        UUID(as_uuid=True), ForeignKey("affiliate_documents.id"), nullable=False, index=True
+    )
+    reviewer_id = Column(UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=False)
+    status = Column(String, nullable=False)
+    rejection_reason = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    document = relationship("AffiliateDocument", back_populates="review_decisions")
+    reviewer = relationship("TenantUser")
 
 
 class Contract(Base):

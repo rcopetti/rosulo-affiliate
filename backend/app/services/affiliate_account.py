@@ -104,12 +104,24 @@ async def create_tenant_affiliate(db: AsyncSession, tenant: Tenant, data: Affili
     return affiliate
 
 
-async def add_document(db: AsyncSession, account: AffiliateAccount, document_type: str, content: bytes, content_type: str) -> AffiliateDocument:
+async def add_document(
+    db: AsyncSession,
+    account: AffiliateAccount,
+    affiliate: Affiliate,
+    document_type: str,
+    content: bytes,
+    content_type: str,
+) -> AffiliateDocument:
     document_id = uuid.uuid4()
     storage_key = await asyncio.to_thread(put_document, document_id, content)
     doc = AffiliateDocument(
-        id=document_id, affiliate_account_id=account.id, document_type=document_type,
-        document_url=storage_key, content_type=content_type, file_size=len(content),
+        id=document_id,
+        affiliate_account_id=account.id,
+        affiliate_id=affiliate.id,
+        document_type=document_type,
+        document_url=storage_key,
+        content_type=content_type,
+        file_size=len(content),
     )
     db.add(doc)
     await db.commit()

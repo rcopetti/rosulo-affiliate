@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import is_supported_currency, normalize_currency_code, quantize_ledger_amount
 from app.db.models import Affiliate, Commission, Payout, PayoutCommission, Tenant
+from app.services.document_review import get_document_status
 
 
 async def request_payout(
@@ -16,8 +17,9 @@ async def request_payout(
     currency = normalize_currency_code(currency)
     if not is_supported_currency(currency):
         raise HTTPException(status_code=400, detail="No available commissions")
-    if not affiliate.kyc_approved_for_payout:
-        raise HTTPException(status_code=403, detail="KYC not approved")
+    eligibility = (await get_document_status(db, affiliate))["payout_eligibility"]
+    if not eligibility["eligible"]:
+        raise HTTPException(status_code=403, detail=eligibility["reason"])
 
     result = await db.execute(
         select(Commission).where(

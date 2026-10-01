@@ -121,27 +121,31 @@ Record the decisions in the phase-specific implementation plan and API contract 
 
 **Outcome:** Merchant review, document status, and affiliate payout eligibility use one explicit, auditable source of truth.
 
+**Status:** Complete (2026-10-01; live Alembic upgrade/downgrade verification was skipped at the owner's direction; revision-chain and offline SQL generation checks passed).
+
 **Likely files:**
-- Modify: `backend/app/db/models.py`, `backend/app/services/affiliate.py`, `backend/app/services/affiliate_account.py`
-- Modify: `backend/app/api/v1/admin/affiliates.py`, `backend/app/api/v1/affiliate/profile.py`
-- Modify: `frontend/src/pages/admin/AffiliateDetailPage.tsx`, `frontend/src/pages/affiliate/RequestPayoutPage.tsx`, `frontend/src/components/affiliate/KycUploader.tsx`
-- Create: next Alembic revision under `backend/alembic/versions/`
-- Test: `backend/tests/test_profile.py`, `backend/tests/test_affiliate.py`, relevant frontend page tests
+- Modify: `backend/app/db/models.py`, `backend/app/services/affiliate.py`, `backend/app/services/affiliate_account.py`, `backend/app/services/payout.py`, `backend/app/services/document_review.py`
+- Modify: `backend/app/api/v1/admin/affiliates.py`, `backend/app/api/v1/affiliate/profile.py`, `backend/app/api/v1/affiliate/merchants.py`, `backend/app/api/v1/dependencies.py`
+- Modify: `backend/app/schemas/affiliate.py`, `backend/app/schemas/affiliate_account.py`; create `backend/app/schemas/document_review.py`
+- Modify: `frontend/src/api/admin/affiliates.ts`, `frontend/src/api/affiliate/profile.ts`, `frontend/src/api/types.ts`
+- Modify: `frontend/src/pages/admin/AffiliateDetailPage.tsx`, `frontend/src/pages/admin/AffiliatesPage.tsx`, `frontend/src/pages/admin/DashboardPage.tsx`, `frontend/src/pages/affiliate/ProfilePage.tsx`, `frontend/src/pages/affiliate/RequestPayoutPage.tsx`, `frontend/src/components/affiliate/KycUploader.tsx`, `frontend/src/components/shared/KycStatusBadge.tsx`
+- Create: `backend/alembic/versions/a9b0c1d2e3f4_affiliate_document_review.py`
+- Test: `backend/tests/test_document_review.py`, `backend/tests/test_document_review_migration.py`, `backend/tests/test_payout.py`; `frontend/src/tests/components/KycUploader.test.tsx`, `frontend/src/tests/pages/AffiliateDetailPage.test.tsx`, `frontend/src/tests/pages/RequestPayoutPage.test.tsx`
 
 **Implementation sequence:**
 
-- [ ] Add failing API/UI tests covering no documents, a pending document, an approved document, a rejected document, and per-merchant eligibility.
-- [ ] Define whether each document is reviewed globally or per merchant. Store review state, reviewer, decision time, and rejection reason at the correct scope; avoid inferring document approval from a single affiliate-level boolean.
-- [ ] Update merchant review actions and affiliate status rendering to read/write the same policy state.
-- [ ] Enforce payout eligibility in the backend from that policy state; make the frontend display the backend's decision and reason rather than implementing a different rule.
-- [ ] Align accepted upload types and document requirements with the actual merchant policy. Do not claim identity/business verification if only a tax-form upload is supported.
+- [x] Add failing API/UI tests covering no documents, a pending document, an approved document, a rejected document, and per-merchant eligibility.
+- [x] Define per-merchant document copies. Store append-only review decisions with reviewer, decision time, and rejection reason; preserve legacy account-wide documents without using their booleans for eligibility.
+- [x] Update merchant review actions and affiliate status rendering to read/write the same policy state.
+- [x] Enforce payout eligibility in the backend from that policy state; make the frontend display the backend's decision and reason rather than implementing a different rule.
+- [x] Align accepted upload types and document requirements with the actual merchant policy. Describe this as tax-document review, not general identity/business verification.
 
 **Acceptance criteria:**
 
-- Merchant and affiliate views show consistent document and payout eligibility states.
-- The backend rejects ineligible payout requests even when called outside the UI.
-- Review actions are attributable and rejection reasons are visible to the intended users.
-- Re-uploading a new document does not erase or misrepresent prior review history.
+- [x] Merchant and affiliate views show consistent document and payout eligibility states.
+- [x] The backend rejects ineligible payout requests even when called outside the UI.
+- [x] Review actions are attributable and rejection reasons are visible to the intended users.
+- [x] Re-uploading a new document does not erase or misrepresent prior review history.
 
 ### Workstream 0.4: Enforce onboarding and merchant-role boundaries
 

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getBalance } from '@/api/affiliate/balance';
 import { requestPayout } from '@/api/affiliate/payouts';
-import { getProfile } from '@/api/affiliate/profile';
+import { getAffiliateDocuments } from '@/api/affiliate/profile';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
@@ -18,9 +18,13 @@ export function RequestPayoutPage() {
   const [currency, setCurrency] = useState('');
 
   const { data: balance, isLoading } = useQuery({ queryKey: ['affiliate-balance'], queryFn: getBalance });
-  const { data: profile } = useQuery({ queryKey: ['affiliate-account'], queryFn: getProfile });
+  const { data: documentStatus } = useQuery({
+    queryKey: ['affiliate-documents'],
+    queryFn: getAffiliateDocuments,
+  });
 
-  const kycApproved = profile?.documents?.length ? profile.documents.every((d) => d.approved) : false;
+  const eligibility = documentStatus?.payout_eligibility;
+  const payoutEligible = eligibility?.eligible ?? false;
 
   const mutation = useMutation({
     mutationFn: () => requestPayout(currency),
@@ -45,9 +49,9 @@ export function RequestPayoutPage() {
   return (
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-bold text-slate-900">Request Payout</h1>
-      {!kycApproved && (
+      {!payoutEligible && (
         <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning-fg" role="status">
-          Your documents are not yet approved. You cannot request a payout until KYC is approved.
+          {eligibility?.reason || 'Your tax document is not yet eligible for payout.'}
         </div>
       )}
       <Card>
@@ -68,13 +72,13 @@ export function RequestPayoutPage() {
               : 'No available balance'}
           </p>
           <p className="flex items-center gap-2 text-sm text-slate-600">
-            KYC status: <KycStatusBadge approved={kycApproved} />
+            Tax document status: <KycStatusBadge status={eligibility?.status ?? 'missing'} />
           </p>
           <Button
             className="w-full"
             onClick={() => mutation.mutate()}
             isLoading={mutation.isPending}
-            disabled={!kycApproved || !selectedBalance || selectedBalance.available <= 0}
+            disabled={!payoutEligible || !selectedBalance || selectedBalance.available <= 0}
           >
             {selectedBalance
               ? `Request payout of ${formatCurrency(selectedBalance.available, selectedBalance.currency)}`

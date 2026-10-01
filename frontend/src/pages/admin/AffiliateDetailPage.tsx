@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { PencilLine } from 'lucide-react';
-import { approveKyc, getAffiliate, rejectKyc, viewAffiliateDocument } from '@/api/admin/affiliates';
+import { getAffiliate, reviewAffiliateDocument, viewAffiliateDocument } from '@/api/admin/affiliates';
 import { getContract } from '@/api/admin/contracts';
 import { Button } from '@/components/ui/Button';
 import { PdfViewer } from '@/components/ui/PdfViewer';
@@ -19,7 +19,7 @@ export function AffiliateDetailPage() {
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewType, setDocumentPreviewType] = useState<string | null>(null);
   const [documentPreviewContentType, setDocumentPreviewContentType] = useState<string | null>(null);
-
+  const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
 
   useEffect(() => () => {
     if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
@@ -36,22 +36,23 @@ export function AffiliateDetailPage() {
     retry: false,
   });
 
-  const approve = useMutation({
-    mutationFn: () => approveKyc(id!),
-    onSuccess: () => {
+  const review = useMutation({
+    mutationFn: ({ documentId, status, rejectionReason }: {
+      documentId: string;
+      status: 'approved' | 'rejected';
+      rejectionReason?: string;
+    }) => reviewAffiliateDocument(id!, documentId, {
+      status,
+      rejection_reason: rejectionReason,
+    }),
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin-affiliate', id] });
-      toast.add({ title: 'KYC approved', variant: 'success' });
+      toast.add({
+        title: variables.status === 'approved' ? 'Tax document approved' : 'Tax document rejected',
+        variant: 'success',
+      });
     },
-    onError: () => toast.add({ title: 'Error', description: 'Could not approve KYC', variant: 'error' }),
-  });
-
-  const reject = useMutation({
-    mutationFn: () => rejectKyc(id!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-affiliate', id] });
-      toast.add({ title: 'KYC rejected', variant: 'success' });
-    },
-    onError: () => toast.add({ title: 'Error', description: 'Could not reject KYC', variant: 'error' }),
+    onError: () => toast.add({ title: 'Error', description: 'Could not review tax document', variant: 'error' }),
   });
 
   if (isLoading || !data) return <p className="text-sm text-fg-muted">Loading…</p>;
@@ -83,7 +84,7 @@ export function AffiliateDetailPage() {
       />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-fg">{data.name}</h1>
-        <KycStatusBadge approved={data.kyc_approved_for_payout} />
+        <KycStatusBadge status={data.payout_eligibility.status} />
       </div>
 
       <Card>
@@ -103,14 +104,6 @@ export function AffiliateDetailPage() {
             </div>
           ))}
         </dl>
-        <div className="mt-4 flex gap-2">
-          <Button onClick={() => approve.mutate()} isLoading={approve.isPending}>
-            Approve KYC
-          </Button>
-          <Button variant="danger" onClick={() => reject.mutate()} isLoading={reject.isPending}>
-            Reject KYC
-          </Button>
-        </div>
       </Card>
 
       <Card>
@@ -122,34 +115,74 @@ export function AffiliateDetailPage() {
             {[...data.documents]
               .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
               .map((document, index) => (
-              <div key={document.id} className="flex items-center justify-between gap-4 rounded-lg border border-line p-3">
-                <div>
-                  <p className="text-sm font-medium text-fg">
-                    {document.document_type}
-                    {index === 0 && <span className="ml-2 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-fg">Most recent</span>}
-                  </p>
-                  <p className="text-xs text-fg-muted">
-                    Submitted {formatDateTime(document.created_at)} · {document.approved ? 'Approved' : 'Pending review'}
-                  </p>
+                <div key={document.id} className="space-y-3 rounded-lg border border-line p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-fg">
+                        {document.document_type}
+                        {index === 0 && <span className="ml-2 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-fg">Most recent</span>}
+                      </p>
+                      <p className="text-xs text-fg-muted">
+                        Submitted {formatDateTime(document.created_at)} · {document.status === 'approved' ? 'Approved' : document.status === 'rejected' ? 'Rejected' : 'Pending review'}
+                      </p>
+                      {document.review_history.map((review, reviewIndex) => (
+                        <p key={`${document.id}-${reviewIndex}`} className="mt-1 text-xs text-fg-muted">
+                          Reviewed {formatDateTime(review.reviewed_at)} by {review.reviewer.name || review.reviewer.email}: {review.status}
+                          {review.rejection_reason ? ` · ${review.rejection_reason}` : ''}
+                        </p>
+                      ))}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const preview = await viewAffiliateDocument(id!, document.id);
+                          setDocumentPreviewUrl(preview.url);
+                          setDocumentPreviewContentType(preview.contentType);
+                          setDocumentPreviewType(document.content_type);
+                        } catch {
+                          toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
+                        }
+                      }}
+                    >
+                      View securely
+                    </Button>
+                  </div>
+                  <label className="block text-xs text-fg-muted">
+                    Rejection reason
+                    <textarea
+                      aria-label={`Rejection reason for ${document.document_type}`}
+                      className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg"
+                      rows={2}
+                      value={rejectionReasons[document.id] || ''}
+                      onChange={(event) => setRejectionReasons((current) => ({ ...current, [document.id]: event.target.value }))}
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => review.mutate({ documentId: document.id, status: 'approved' })}
+                      isLoading={review.isPending}
+                    >
+                      Approve tax form
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={!rejectionReasons[document.id]?.trim()}
+                      onClick={() => review.mutate({
+                        documentId: document.id,
+                        status: 'rejected',
+                        rejectionReason: (rejectionReasons[document.id] || '').trim(),
+                      })}
+                      isLoading={review.isPending}
+                    >
+                      Reject tax form
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={async () => {
-                    try {
-                      const preview = await viewAffiliateDocument(id!, document.id);
-                      setDocumentPreviewUrl(preview.url);
-                      setDocumentPreviewContentType(preview.contentType);
-                      setDocumentPreviewType(document.document_type);
-                    } catch {
-                      toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
-                    }
-                  }}
-                >
-                  View securely
-                </Button>
-              </div>
-            ))}
+              ))}
           </div>
         ) : <p className="text-sm text-fg-muted">No tax documents uploaded.</p>}
         {documentPreviewUrl && (

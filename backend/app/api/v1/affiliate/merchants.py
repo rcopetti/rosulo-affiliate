@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.dependencies import get_current_affiliate_account
 from app.db.dependencies import get_db
 from app.db.models import Affiliate, AffiliateAccount, Tenant
-from app.services import affiliate_account as acct_service
-from app.services import affiliate as affiliate_service
+from app.services.document_review import get_document_status
 
 router = APIRouter()
 
@@ -23,14 +22,17 @@ async def list_merchants(
         .join(Tenant, Affiliate.tenant_id == Tenant.id)
         .where(Affiliate.affiliate_account_id == account.id)
     )
-    return [
-        {
-            "tenant_id": str(t.id),
-            "name": t.name,
-            "kyc_approved_for_payout": a.kyc_approved_for_payout,
-        }
-        for a, t in result.all()
-    ]
+    merchants = []
+    for affiliate, tenant in result.all():
+        document_status = await get_document_status(db, affiliate)
+        merchants.append(
+            {
+                "tenant_id": str(tenant.id),
+                "name": tenant.name,
+                "payout_eligibility": document_status["payout_eligibility"],
+            }
+        )
+    return merchants
 
 
 @router.post("/{tenant_id}/join")
