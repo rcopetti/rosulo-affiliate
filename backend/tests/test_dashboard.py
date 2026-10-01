@@ -85,9 +85,12 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
     )
     assert affiliate_balance.status_code == 200
-    assert {
-        row["currency"] for row in affiliate_balance.json()["balances_by_currency"]
-    } == {"USD", "EUR"}
+    balances_by_currency = {
+        row["currency"]: row for row in affiliate_balance.json()["balances_by_currency"]
+    }
+    assert set(balances_by_currency) == {"USD", "EUR"}
+    assert balances_by_currency["USD"]["earned"] == 10.0
+    assert balances_by_currency["EUR"]["earned"] == 10.0
     assert affiliate_balance.json()["earned"] is None
     assert affiliate_balance.json()["reversed"] is None
     assert affiliate_balance.json()["currency"] is None
@@ -103,7 +106,12 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
     assert balance["earned"] is None
     assert balance["reversed"] is None
     assert balance["currency"] is None
-    assert {row["currency"] for row in a_dash.json()["sales_by_sequence"]} == {"USD", "EUR"}
+    sales_by_currency = {
+        row["currency"]: row for row in a_dash.json()["sales_by_sequence"]
+    }
+    assert set(sales_by_currency) == {"USD", "EUR"}
+    assert sales_by_currency["USD"]["amount"] == 10.0
+    assert sales_by_currency["EUR"]["amount"] == 10.0
 
     t_dash = await client.get(
         "/api/v1/admin/dashboard",
@@ -111,6 +119,9 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
     )
     assert t_dash.status_code == 200
     assert "campaign_performance" in t_dash.json()
-    assert {
-        row["currency"] for row in t_dash.json()["commission_liability"]
-    } == {"USD", "EUR"}
+    liability_by_currency = {
+        row["currency"]: row for row in t_dash.json()["commission_liability"]
+    }
+    assert set(liability_by_currency) == {"USD", "EUR"}
+    assert liability_by_currency["USD"]["gross"] == 10.0
+    assert liability_by_currency["EUR"]["gross"] == 10.0

@@ -37,7 +37,7 @@ As explicitly deferred to Workstream 0.2, W0.5 does not change the existing inbo
 
 **Files:** none
 
-- [ ] **Step 1: Confirm the feature branch starts clean**
+- [x] **Step 1: Confirm the feature branch starts clean**
 
 Run from the repository root:
 
@@ -48,7 +48,7 @@ git branch --show-current
 
 Expected: current branch is `feature/ledger-amount-currency-invariants`; only the committed W0.5 spec/plan documentation is present.
 
-- [ ] **Step 2: Run the backend baseline on the disposable test database**
+- [x] **Step 2: Run the backend baseline on the disposable test database**
 
 Run from `backend/` using the approved disposable `TEST_DATABASE_URL` or the repository-derived `_test` database:
 
@@ -64,7 +64,7 @@ Expected: baseline backend suite passes before any code changes. Stop if the sui
 - Create: `backend/tests/test_money.py`
 - Create: `backend/app/core/money.py`
 
-- [ ] **Step 1: Add failing tests for Decimal conversion, rounding, and currency handling**
+- [x] **Step 1: Add failing tests for Decimal conversion, rounding, and currency handling**
 
 Create `backend/tests/test_money.py`:
 
@@ -107,7 +107,7 @@ def test_currency_codes_are_normalized_without_an_allowlist_rejection():
     assert normalize_currency_code("brl") == "BRL"
 ```
 
-- [ ] **Step 2: Run the new test and confirm it fails for the missing helper**
+- [x] **Step 2: Run the new test and confirm it fails for the missing helper**
 
 Run from `backend/`:
 
@@ -117,7 +117,7 @@ uv run pytest tests/test_money.py -v
 
 Expected: FAIL because `app.core.money` does not exist yet. Pytest still runs the session-autouse database fixture, so the disposable-database safety gate applies even to this unit test.
 
-- [ ] **Step 3: Implement the shared money helper**
+- [x] **Step 3: Implement the shared money helper**
 
 Create `backend/app/core/money.py`:
 
@@ -169,7 +169,7 @@ def quantize_ledger_amount(
     return decimal_value(value).quantize(_quantum(exponent), rounding=ROUND_HALF_UP)
 ```
 
-- [ ] **Step 4: Re-run the helper tests**
+- [x] **Step 4: Re-run the helper tests**
 
 Run from `backend/`:
 
@@ -179,7 +179,7 @@ uv run pytest tests/test_money.py -v
 
 Expected: PASS for positive and negative half-up boundaries, supported ledger precision, and provider-code normalization independent of ledger support.
 
-- [ ] **Step 5: Commit the helper and its tests**
+- [x] **Step 5: Commit the helper and its tests**
 
 ```bash
 git add backend/app/core/money.py backend/tests/test_money.py
@@ -193,7 +193,7 @@ git commit -m "Add Decimal currency helpers"
 - Modify: `backend/tests/test_commission.py`
 - Modify: `backend/tests/test_tax.py`
 
-- [ ] **Step 1: Add ORM precision assertions**
+- [x] **Step 1: Add ORM precision assertions**
 
 Create `backend/tests/test_money_models.py` with these imports and test:
 
@@ -238,7 +238,7 @@ def test_financial_model_columns_use_expected_numeric_precision():
     assert Term.__table__.c.commission_percent.type.scale == 6
 ```
 
-- [ ] **Step 2: Add a commission half-up regression using the existing integration fixture**
+- [x] **Step 2: Add a commission half-up regression using the existing integration fixture**
 
 In `backend/tests/test_commission.py::test_sale_generates_commission`, pass an explicit threshold in the admin invite request:
 
@@ -283,7 +283,7 @@ assert eur_sale.status_code == 200
 
 Fetch commissions again and assert there is still only the USD commission. This verifies the minimum threshold is interpreted in the event's own currency without FX conversion. The USD value is `2.05 × 10% = 0.205`; binary-float `round()` yields `0.20`, while half-up Decimal quantization must yield `0.21`.
 
-- [ ] **Step 3: Change the existing tax unit test to use Decimal values**
+- [x] **Step 3: Change the existing tax unit test to use Decimal values**
 
 In `backend/tests/test_tax.py`, add `from decimal import Decimal` and replace the test body with:
 
@@ -309,7 +309,7 @@ async def test_tax_withholding():
     )
 ```
 
-- [ ] **Step 4: Run the targeted tests and confirm expected failures**
+- [x] **Step 4: Run the targeted tests and confirm expected failures**
 
 Run from `backend/` with the approved disposable test database:
 
@@ -334,15 +334,15 @@ Expected before implementation: ORM assertions fail because the columns are Floa
 - Modify: `backend/app/api/v1/public/webhooks.py`
 - Create: `backend/alembic/versions/d4e5f6a7b8c9_ledger_amount_currency_invariants.py`
 
-- [ ] **Step 1: Change financial ORM columns to Numeric**
+- [x] **Step 1: Change financial ORM columns to Numeric**
 
 In `backend/app/db/models.py`, import `Decimal` and SQLAlchemy `Numeric`; remove `Float` if no Float columns remain. Change `Event.amount`, `PaymentRecord.amount`, Commission `gross_amount`/`withholding_amount`/`net_amount`, Payout `requested_amount`/`approved_amount`/`withholding_total`/`paypal_fees`/`net_paid`, PayoutCommission `amount`, and Term `minimum_threshold` to `Numeric(20, 2)`. Change `Term.commission_percent` to `Numeric(9, 6)`. Keep `Term.minimum_threshold` nullable and preserve existing nullability for other columns. Use `Decimal("0.00")` defaults for money columns.
 
-- [ ] **Step 2: Update schemas to parse money as Decimal while preserving numeric JSON responses**
+- [x] **Step 2: Update schemas to parse money as Decimal while preserving numeric JSON responses**
 
 In `backend/app/schemas/event.py`, import `Decimal`, use `amount: Decimal = Decimal("0.00")` in `EventCreate`, validate `currency` with `Field("USD", pattern="^[A-Za-z]{3}$")` while allowing codes outside the ledger allowlist, retain `EventOut.amount: float`, and add `commission_status: str | None = None`. In `backend/app/schemas/commission.py`, keep output amount fields as `float`. In `backend/app/schemas/contract.py`, use Decimal for `TermBase.commission_percent`, `TermBase.minimum_threshold`, and `TermUpdate` equivalents; keep `TermOut` monetary/rate values as float response fields.
 
-- [ ] **Step 3: Use Decimal for commission, tax, and contract calculations**
+- [x] **Step 3: Use Decimal for commission, tax, and contract calculations**
 
 Update `backend/app/services/commission.py` to convert percentage values with `Decimal(str(applicable.commission_percent))`, multiply Decimal event amounts, and quantize before storing gross/net values:
 
@@ -356,11 +356,11 @@ _, withholding, net = apply_tax(account, gross)
 
 Update `backend/app/services/tax.py` to use Decimal rates `Decimal("0.24")`, `Decimal("0.30")`, and `Decimal("0.00")`; quantize withholding/net with half-up. Do not change the rates or tax-status policy. Update `backend/app/services/contract.py` to convert incoming numeric contract values with `decimal_value` before assigning them. In `backend/app/services/affiliate_account.py`, convert numeric values in the invite `contract_terms` JSON with `decimal_value` before creating `Term` rows. Keep `create_reversal` semantics unchanged, converting its numeric literals/results to Decimal only; end-to-end refund/chargeback creation is outside W0.5.
 
-- [ ] **Step 4: Parse the current tenant payment webhook amount as Decimal**
+- [x] **Step 4: Parse the current tenant payment webhook amount as Decimal**
 
 In `backend/app/services/payment_record.py`, accept Decimal for `amount`. In `backend/app/api/v1/public/webhooks.py`, replace `float(payload.get("amount", 0))` with `normalize_provider_amount(payload.get("amount", 0))` so provider amounts are half-up quantized to two decimals before persistence. Keep the incoming `PaymentRecord` meaning unchanged in W0.5; Workstream 0.2 will repurpose it for manual merchant-to-affiliate settlement.
 
-- [ ] **Step 5: Add the Alembic migration in the same change set**
+- [x] **Step 5: Add the Alembic migration in the same change set**
 
 Create `backend/alembic/versions/d4e5f6a7b8c9_ledger_amount_currency_invariants.py` with the following core migration implementation. Add the full preflight queries and conversion list exactly as shown; do not infer or coerce data outside these rules:
 
@@ -489,7 +489,7 @@ def downgrade() -> None:
         )
 ```
 
-- [ ] **Step 6: Run the targeted test group and commit Task 3**
+- [x] **Step 6: Run the targeted test group and commit Task 3**
 
 Run from `backend/`:
 
@@ -514,7 +514,7 @@ git commit -m "Store ledger amounts with decimal precision"
 - Modify: `backend/app/schemas/event.py`
 - Modify: `backend/tests/test_events.py`
 
-- [ ] **Step 1: Add a failing unsupported-currency API test**
+- [x] **Step 1: Add a failing unsupported-currency API test**
 
 Extend `test_event_ingestion` with a `monkeypatch` parameter. Add these imports if absent:
 
@@ -575,7 +575,7 @@ After `campaign_id` is available, append:
         )
     assert commission_count == 1
 
-- [ ] **Step 2: Run the event test and confirm the expected failure**
+- [x] **Step 2: Run the event test and confirm the expected failure**
 
 Run from `backend/`:
 
@@ -585,11 +585,11 @@ uv run pytest tests/test_events.py::test_event_ingestion -v
 
 Expected before implementation: the event is inserted, then commission quantization raises `Unsupported ledger currency` instead of returning the accepted Event with a held status.
 
-- [ ] **Step 3: Implement the currency hold and replay behavior**
+- [x] **Step 3: Implement the currency hold and replay behavior**
 
 In `backend/app/services/event.py`, normalize currency codes with `normalize_currency_code` and quantize source amounts with `normalize_provider_amount`; do not reject a syntactically valid code because it is not in the ledger allowlist. In the sale commission path, check `is_supported_currency(event.currency)` before contract/amount calculation. For unsupported currency, set `event.commission_status = "currency_unsupported"`, commit that event state, and return without creating a Commission. For a supported currency, create the Commission exactly once and clear the blocked state. Keep the route’s tenant-scoped event idempotency and commission-count check so replaying the event after currency support is added can create the missing Commission.
 
-- [ ] **Step 4: Re-run the event tests**
+- [x] **Step 4: Re-run the event tests**
 
 Run from `backend/`:
 
@@ -599,7 +599,7 @@ uv run pytest tests/test_events.py -v
 
 Expected: PASS for stored unsupported-currency events, visible blocked state, and exactly-once commission creation after support is enabled.
 
-- [ ] **Step 5: Add a failing invalid-currency syntax assertion**
+- [x] **Step 5: Add a failing invalid-currency syntax assertion**
 
 Append this block after the unsupported-currency payload is declared:
 
@@ -622,7 +622,7 @@ Append this block after the unsupported-currency payload is declared:
 
 The current service raises `ValueError` for malformed syntax; the explicit `pytest.fail` names the missing API validation.
 
-- [ ] **Step 6: Run the invalid-currency test and confirm it fails**
+- [x] **Step 6: Run the invalid-currency test and confirm it fails**
 
 Run from `backend/`:
 
@@ -632,7 +632,7 @@ uv run pytest tests/test_events.py::test_event_ingestion -v
 
 Expected: FAIL because malformed currency syntax reaches `normalize_currency_code` and becomes a server exception instead of a validation response.
 
-- [ ] **Step 7: Validate currency syntax at the EventCreate boundary**
+- [x] **Step 7: Validate currency syntax at the EventCreate boundary**
 
 In `backend/app/schemas/event.py`, declare:
 
@@ -642,7 +642,7 @@ currency: str = Field("USD", pattern="^[A-Za-z]{3}$")
 
 This rejects malformed codes with HTTP 422 while still accepting valid three-letter codes outside USD/EUR/BRL; `backend/app/services/event.py` normalizes accepted codes to uppercase.
 
-- [ ] **Step 8: Re-run the event tests**
+- [x] **Step 8: Re-run the event tests**
 
 Run from `backend/`:
 
@@ -652,7 +652,7 @@ uv run pytest tests/test_events.py -v
 
 Expected: PASS for malformed-code 422 validation, unsupported-code hold, and replay after support is enabled.
 
-- [ ] **Step 9: Commit the unsupported-currency handling**
+- [x] **Step 9: Commit the unsupported-currency handling**
 
 ```bash
 git add backend/app/services/event.py backend/app/services/commission.py backend/app/schemas/event.py backend/tests/test_events.py docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
@@ -669,7 +669,7 @@ git commit -m "Hold unsupported-currency commissions for replay"
 - Create: `backend/tests/test_balance.py`
 - Modify: `backend/tests/test_dashboard.py`
 
-- [ ] **Step 1: Add a failing pure balance-projection test**
+- [x] **Step 1: Add a failing pure balance-projection test**
 
 Create `backend/tests/test_balance.py`:
 
@@ -747,7 +747,7 @@ Extend `test_dashboards` after campaign creation with the empty-ledger response,
 
 After fetching `a_dash`, assert its `balances_by_currency` contains USD and EUR, its legacy `earned`, `reversed`, and `currency` are null, and sales-by-sequence has separate USD/EUR rows. After fetching `t_dash`, assert commission-liability rows contain separate USD/EUR entries.
 
-- [ ] **Step 2: Run the tests and confirm the expected failures**
+- [x] **Step 2: Run the tests and confirm the expected failures**
 
 Run from `backend/`:
 
@@ -758,7 +758,7 @@ uv run pytest tests/test_dashboard.py::test_dashboards -v
 
 Expected: the unit test fails to import the missing balance projection, and the API test fails because the balance response has no `balances_by_currency`.
 
-- [ ] **Step 3: Implement the shared Decimal balance projection**
+- [x] **Step 3: Implement the shared Decimal balance projection**
 
 Create `backend/app/services/balance.py` with a pure row projector and async SQL query:
 
@@ -863,13 +863,13 @@ def add_legacy_balance_fields(balances: list[dict]) -> dict:
 
 Do not sum amounts across currencies.
 
-- [ ] **Step 4: Update balance and dashboard API projections**
+- [x] **Step 4: Update balance and dashboard API projections**
 
 Use `get_balances` and `add_legacy_balance_fields` in `/api/v1/affiliate/balance`, and set `response_model=BalanceOut` so Decimal values convert to the existing numeric JSON fields at serialization. Use the same projection in `affiliate_dashboard`. Always return `balances_by_currency`. For exactly one currency populate legacy flat values from that entry; for multiple currencies set legacy flat amounts and `currency` to `None`; for no commissions return an empty list and zero/USD legacy values.
 
 Group affiliate sales-by-sequence by `(payment_sequence, Commission.currency)` and tenant commission liability by `(month, Commission.currency)`. Add currency fields to `BalanceOut`, `SalesBySequencePoint`, `CommissionLiabilityRow`, `AffiliateDashboardOut`, and `TenantDashboardOut`. Keep all dashboard service aggregation in Decimal; remove `float()` conversions from aggregate/service code and let the Pydantic response models convert at the API boundary.
 
-- [ ] **Step 5: Run balance and dashboard tests after implementation**
+- [x] **Step 5: Run balance and dashboard tests after implementation**
 
 Run from `backend/`:
 
@@ -879,7 +879,7 @@ uv run pytest tests/test_balance.py tests/test_dashboard.py -v
 
 Expected: PASS for every per-currency balance and dashboard aggregate.
 
-- [ ] **Step 6: Commit the currency-scoped balance projections**
+- [x] **Step 6: Commit the currency-scoped balance projections**
 
 ```bash
 git add backend/app/services/balance.py backend/app/api/v1/affiliate/balance.py backend/app/services/dashboard.py backend/app/schemas/dashboard.py backend/tests/test_balance.py backend/tests/test_dashboard.py docs/superpowers/specs/2026-09-30-ledger-amount-currency-invariants-design.md docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
@@ -904,7 +904,7 @@ git commit -m "Group ledger balances by currency"
 - Create: `frontend/src/components/affiliate/CurrencyBalances.tsx`
 - Create: `frontend/src/tests/components/CurrencyBalances.test.tsx`
 
-- [ ] **Step 1: Add the failing payout currency-selection test**
+- [x] **Step 1: Add the failing payout currency-selection test**
 
 In `test_payout_flow`, after the existing USD sale/webhook, post a second sale and mark its matching tenant payment record paid:
 
@@ -941,7 +941,7 @@ In `test_payout_flow`, after the existing USD sale/webhook, post a second sale a
 
 Change the payout request to send `json={"currency": "USD"}`. Assert its currency is USD and its `requested_amount` is 10.0 (not 20.0). Fetch the affiliate commissions and assert the EUR commission remains `available` while the USD commission is reserved.
 
-- [ ] **Step 2: Run the payout test and confirm the expected failure**
+- [x] **Step 2: Run the payout test and confirm the expected failure**
 
 Run from `backend/`:
 
@@ -951,11 +951,11 @@ uv run pytest tests/test_payout.py -v
 
 Expected before implementation: `PayoutRequest` has no currency input and `request_payout` sums all available commissions while hard-coding USD.
 
-- [ ] **Step 3: Require and apply payout currency selection**
+- [x] **Step 3: Require and apply payout currency selection**
 
 Add `currency: str` to `PayoutRequest`. Pass it through the affiliate route to `request_payout(db, affiliate, currency)`. Validate it with `is_supported_currency`; select only available commissions matching the affiliate and currency; sum Decimal gross/withholding/net; set `Payout.currency` to the requested value. Do no FX conversion.
 
-- [ ] **Step 4: Add a failing frontend per-currency rendering test**
+- [x] **Step 4: Add a failing frontend per-currency rendering test**
 
 Create `frontend/src/tests/components/CurrencyBalances.test.tsx`:
 
@@ -999,7 +999,7 @@ describe('CurrencyBalances', () => {
 });
 ```
 
-- [ ] **Step 5: Run the frontend regression test and confirm it fails**
+- [x] **Step 5: Run the frontend regression test and confirm it fails**
 
 Run from `frontend/`:
 
@@ -1009,7 +1009,7 @@ npm run test -- src/tests/components/CurrencyBalances.test.tsx
 
 Expected before implementation: `CurrencyBalances` does not exist.
 
-- [ ] **Step 6: Update the frontend types and render one section per currency**
+- [x] **Step 6: Update the frontend types and render one section per currency**
 
 In the existing `Event` interface in `frontend/src/api/types.ts`, add `commission_status?: 'currency_unsupported' | null`. Add these currency types:
 
@@ -1090,7 +1090,7 @@ Change `BalanceSummary` to accept `CurrencyBalance` and label `reversal_total` a
 
 In `RequestPayoutPage`, create a `currency` state, derive options from `balance.balances_by_currency`, and render the existing Select with `label="Payout currency"`. Disable the request button until a currency is selected and display only that currency's available amount. Change `frontend/src/api/affiliate/payouts.ts` to `requestPayout(currency: string)` and post `{ currency }`, not an amount. Change `BalanceSummary` to accept `CurrencyBalance` and label `reversal_total` as “Reversal total” instead of presenting the legacy `debt` alias as collectible debt.
 
-- [ ] **Step 7: Run frontend tests and build**
+- [x] **Step 7: Run frontend tests and build**
 
 Run from `frontend/`:
 
@@ -1101,7 +1101,7 @@ npm run build
 
 Expected: all Vitest tests pass and TypeScript/Vite build succeeds.
 
-- [ ] **Step 8: Commit currency-scoped payout requests and frontend views**
+- [x] **Step 8: Commit currency-scoped payout requests and frontend views**
 
 ```bash
 git add backend/app/schemas/dashboard.py backend/app/schemas/payout.py backend/app/services/balance.py backend/app/api/v1/affiliate/payouts.py backend/app/services/payout.py backend/tests/test_balance.py backend/tests/test_dashboard.py backend/tests/test_payout.py frontend/src/api/types.ts frontend/src/api/affiliate/payouts.ts frontend/src/components/affiliate/BalanceSummary.tsx frontend/src/components/affiliate/SalesBySequenceChart.tsx frontend/src/components/admin/CommissionLiability.tsx frontend/src/pages/affiliate/BalancePage.tsx frontend/src/pages/affiliate/RequestPayoutPage.tsx frontend/src/pages/affiliate/DashboardPage.tsx frontend/src/components/affiliate/CurrencyBalances.tsx frontend/src/tests/components/CurrencyBalances.test.tsx docs/superpowers/specs/2026-09-30-ledger-amount-currency-invariants-design.md docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
@@ -1113,7 +1113,7 @@ git commit -m "Scope currency payout and balance views"
 **Files:**
 - Verify: `backend/alembic/versions/d4e5f6a7b8c9_ledger_amount_currency_invariants.py`
 
-- [ ] **Step 1: Confirm Alembic recognizes the new revision and parent**
+- [x] **Step 1: Confirm Alembic recognizes the new revision and parent**
 
 Run from `backend/` after creating the migration file in Task 3:
 
@@ -1124,7 +1124,9 @@ uv run alembic history -r c2d3e4f5a6b7:head
 
 Expected: one head, `d4e5f6a7b8c9`, with `c2d3e4f5a6b7` as its parent.
 
-- [ ] **Step 2: Verify conversion with representative data on an isolated migration database**
+- [x] **Step 2: Record the owner-approved migration data-review waiver**
+
+The user confirmed there are no existing rows in the monetary tables and instructed that migration verification be marked done. No `_w05_migration_test` database was created, and no upgrade/downgrade or fixture-seed command was executed; the data-conversion review is N/A by owner decision, not a passing migration smoke test. The following procedure is retained only for future validation if data-bearing verification is needed.
 
 From `backend/`, derive the separate database URL without printing its credentials:
 
@@ -1253,7 +1255,7 @@ psql "$W05_MIGRATION_PSQL_URL" -c "SELECT version_num FROM alembic_version;"
 
 Do not delete anything except the named synthetic fixture from this disposable database.
 
-- [ ] **Step 3: Run focused tests and the full suites**
+- [x] **Step 3: Run focused tests and the full suites**
 
 Run from `backend/` with the approved disposable test database:
 
@@ -1271,9 +1273,9 @@ npm run build
 
 Expected: all tests and the build pass.
 
-- [ ] **Step 4: Update the roadmap and review the final diff**
+- [x] **Step 4: Update the roadmap and review the final diff**
 
-After every W0.5 acceptance criterion passes, check only the Workstream 0.5 implementation steps and acceptance criteria in `docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md`. Leave W0.3 and W0.2 unchecked. Run:
+After every W0.5 acceptance criterion passes or receives an explicit owner waiver, check only the Workstream 0.5 implementation steps and acceptance criteria in `docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md`. Leave W0.3 and W0.2 unchecked. Run:
 
 ```bash
 git status --short --branch
@@ -1281,13 +1283,13 @@ git diff --check
 git diff
 ```
 
-- [ ] **Step 5: Commit the completed W0.5 roadmap tracking**
+- [x] **Step 5: Commit the completed W0.5 roadmap tracking**
 
-Stage only the W0.5 checkbox/status updates in the roadmap and completed checkboxes in this implementation plan. Do not stage unrelated workstreams or environment files:
+Stage only the W0.5 roadmap status, implementation/spec waiver record, and reconciliation assertions. Do not stage unrelated workstreams or environment files:
 
 ```bash
-git add docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
-git commit -m "Mark ledger amount workstream complete"
+git add backend/tests/test_dashboard.py docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md docs/superpowers/specs/2026-09-30-ledger-amount-currency-invariants-design.md
+git commit -m "Close W0.5 with migration data-review waiver"
 ```
 
 ## Acceptance Criteria
@@ -1299,12 +1301,12 @@ git commit -m "Mark ledger amount workstream complete"
 - Commission, payout, balance, dashboard sales, and merchant liability calculations are currency-scoped.
 - Negative reversal rows reduce lifetime earned and appear in a separate positive reversal total, not in pending/available/paid buckets.
 - Existing JSON money fields remain numeric; per-currency balance data is additive, and no mixed-currency flat total is returned.
-- Migration preflight blocks unsafe existing ledger data; migration upgrade/downgrade passes on a disposable PostgreSQL database.
+- Migration preflight is implemented. The user confirmed no existing ledger rows and waived data-conversion verification; the Alembic upgrade/downgrade was not executed in this session.
 - Backend tests, frontend tests, and frontend build pass.
 
 ## Self-Review
 
-- **Spec coverage:** Decimal/Numeric precision and half-up rounding are covered in Tasks 1–3; provider event retention and replay in Task 4; balance/reversal semantics and currency-grouped dashboards in Task 5; one-currency payout requests and frontend views in Task 6; migration preflight/conversion and disposable-database verification in Task 7.
+- **Spec coverage:** Decimal/Numeric precision and half-up rounding are covered in Tasks 1–3; provider event retention and replay in Task 4; balance/reversal semantics and currency-grouped dashboards in Task 5; one-currency payout requests and frontend views in Task 6; migration preflight/conversion are implemented in Task 7, with representative data review waived by the user because the tables are empty.
 - **Placeholder scan:** Clean; each implementation and verification step specifies concrete files/actions and expected results.
 - **Type/name consistency:** Backend `SUPPORTED_CURRENCY_EXPONENTS`, `normalize_currency_code`, `normalize_provider_amount`, `quantize_ledger_amount`, `build_balances`, and `get_balances` names are consistent across tests and implementation steps. Frontend `CurrencyBalance`, `Balance`, `balances_by_currency`, and `CurrencyBalances({ balance })` names match across types, component, test, and page wiring. API money responses remain numeric while service/model values remain Decimal.
 - **Scope boundary:** W-9/W-8 eligibility, tax policy, 14-day availability, manual payout settlement, and the legacy PaymentRecord availability lookup remain unchanged; the latter remains explicitly blocked from production use until W0.2 replaces it.

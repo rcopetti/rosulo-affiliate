@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-30
 
-**Status:** Approved design; implementation plan ready
+**Status:** Implemented; data-conversion verification waived by owner
 
 ## Goal
 
@@ -55,7 +55,7 @@ For sale events whose currency is not enabled, return the accepted event with `c
 
 The current Alembic head is `c2d3e4f5a6b7`; add the next revision from that head. Convert existing floating-point money columns to `NUMERIC(20,2)` using half-up rounding and commission percentages to `NUMERIC(9,6)`. The migration must preflight null monetary values, unsupported currency values in the active commission/payout ledger, event/commission currency mismatches, and payouts linked to commissions in more than one currency. Abort with a clear error rather than silently guessing in those cases. Event rows may preserve a provider currency outside the current ledger allowlist and are not rejected solely for that reason.
 
-Review conversion counts and per-currency totals on a disposable representative database before rollout. Tests must cover both supported and unsupported currency event paths. The regular pytest fixture recreates its configured test schema from ORM metadata and does not validate Alembic migrations.
+The owner confirmed that the affected financial tables contain no existing rows and waived representative data-conversion reconciliation as not applicable. No migration-test database was created and no Alembic upgrade/downgrade was run in this session. Tests cover supported and unsupported currency event paths; the regular pytest fixture recreates its configured test schema from ORM metadata and does not validate Alembic migrations.
 
 The current `PaymentRecord` remains an incoming customer-payment record during Workstream 0.5. Its existing commission-availability lookup by external payment ID remains unchanged in this workstream and is not a safe production settlement boundary. Workstream 0.2 must replace that lookup with tenant-scoped merchant-to-affiliate payout reconciliation and repurpose the model to include `payout_id`, payment method, and transfer reference.
 

@@ -180,18 +180,18 @@ Record the decisions in the phase-specific implementation plan and API contract 
 
 **Implementation sequence:**
 
-- [ ] Add failing tests for rounding, fractional commission calculations, negative reversals, and attempts to combine different currencies.
-- [ ] Choose a decimal or integer-minor-unit representation with explicit currency precision; migrate existing values without loss and document the conversion/reconciliation procedure.
-- [ ] Until full multi-currency accounting is available, validate and reject currencies the payout and balance system cannot settle. If multiple currencies are approved, keep every aggregate and payout currency-scoped.
-- [ ] Define balance semantics in API schemas and help text: distinguish lifetime earned (net of reversals) from mutually exclusive pending, available, and paid buckets.
-- [ ] Test the definitions against commission and payout records rather than presenting status labels as interchangeable totals.
+- [x] Add failing tests for rounding, fractional commission calculations, negative reversals, and attempts to combine different currencies.
+- [x] Choose a decimal representation with explicit currency precision and migrate financial columns to Numeric. The user confirmed the existing tables are empty, so data conversion/reconciliation verification was waived as not applicable; no migration upgrade/downgrade was run in this session.
+- [x] Keep every aggregate and payout request currency-scoped; store valid provider currencies outside the ledger allowlist without generating payable commissions.
+- [x] Define balance semantics in API schemas: distinguish lifetime earned (net of reversals) from mutually exclusive pending, available, and paid buckets; expose reversal totals.
+- [x] Test the definitions against commission and payout records rather than presenting status labels as interchangeable totals.
 
 **Acceptance criteria:**
 
 - No aggregate includes amounts from different currencies.
 - Rounding rules are deterministic and covered by tests.
 - Affiliate and merchant balance views reconcile to the same ledger.
-- Status totals, reversal debt, and lifetime earned have documented, non-overlapping meanings.
+- Status totals, reversal totals, and lifetime earned have documented, non-overlapping meanings.
 
 ## 5. P1 — Make Tracking and Reporting Dependable
 
