@@ -19,7 +19,7 @@
 - Modify `backend/app/services/event.py`, `backend/app/services/commission.py`, `backend/app/services/tax.py`, `backend/app/services/payment_record.py`, `backend/app/services/payout.py`, `backend/app/services/dashboard.py`, `backend/app/services/contract.py`, and `backend/app/services/affiliate_account.py`: use Decimal arithmetic and currency-aware selection/aggregation.
 - Create `backend/app/services/balance.py`: shared currency-scoped affiliate balance projection used by the balance route and dashboard.
 - Modify `backend/app/api/v1/affiliate/balance.py`, `backend/app/api/v1/affiliate/payouts.py`, `backend/app/api/v1/public/events.py`, and `backend/app/api/v1/public/webhooks.py`: expose per-currency balances, require a payout currency, and parse incoming amounts as Decimal.
-- Modify `backend/tests/test_commission.py`, `backend/tests/test_dashboard.py`, `backend/tests/test_events.py`, `backend/tests/test_payout.py`, and `backend/tests/test_tax.py`; create `backend/tests/test_money.py` and `backend/tests/test_balance.py`.
+- Modify `backend/tests/test_commission.py`, `backend/tests/test_dashboard.py`, `backend/tests/test_events.py`, `backend/tests/test_payout.py`, and `backend/tests/test_tax.py`; create `backend/tests/test_money.py`, `backend/tests/test_money_models.py`, and `backend/tests/test_balance.py`.
 - Modify `frontend/src/api/types.ts` (including `Event.commission_status`), `frontend/src/api/affiliate/payouts.ts`, `frontend/src/components/affiliate/BalanceSummary.tsx`, `frontend/src/components/affiliate/SalesBySequenceChart.tsx`, `frontend/src/components/admin/CommissionLiability.tsx`, `frontend/src/pages/affiliate/BalancePage.tsx`, `frontend/src/pages/affiliate/RequestPayoutPage.tsx`, and `frontend/src/pages/affiliate/DashboardPage.tsx`; create `frontend/src/components/affiliate/CurrencyBalances.tsx` and `frontend/src/tests/components/CurrencyBalances.test.tsx`.
 - Update only Workstream 0.5’s checkboxes/status in `docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md` after all acceptance criteria pass.
 
@@ -122,13 +122,13 @@ Expected: FAIL because `app.core.money` does not exist yet. Pytest still runs th
 Create `backend/app/core/money.py`:
 
 ```python
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 SUPPORTED_CURRENCY_EXPONENTS = {"USD": 2, "EUR": 2, "BRL": 2}
 _PROVIDER_EXPONENT = 2
 
 
-def decimal_value(value: Decimal | str | int | float) -> Decimal:
+def decimal_value(value: Decimal | str | float) -> Decimal:
     try:
         amount = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
@@ -153,14 +153,14 @@ def _quantum(exponent: int) -> Decimal:
     return Decimal(1).scaleb(-exponent)
 
 
-def normalize_provider_amount(value: Decimal | str | int | float) -> Decimal:
+def normalize_provider_amount(value: Decimal | str | float) -> Decimal:
     return decimal_value(value).quantize(
         _quantum(_PROVIDER_EXPONENT), rounding=ROUND_HALF_UP
     )
 
 
 def quantize_ledger_amount(
-    value: Decimal | str | int | float, currency: str
+    value: Decimal | str | float, currency: str
 ) -> Decimal:
     code = normalize_currency_code(currency)
     exponent = SUPPORTED_CURRENCY_EXPONENTS.get(code)
@@ -189,13 +189,13 @@ git commit -m "Add Decimal currency helpers"
 ### Task 2: Prove Decimal model/calculation behavior before changing models
 
 **Files:**
-- Modify: `backend/tests/test_money.py`
+- Create: `backend/tests/test_money_models.py`
 - Modify: `backend/tests/test_commission.py`
 - Modify: `backend/tests/test_tax.py`
 
 - [ ] **Step 1: Add ORM precision assertions**
 
-Add these imports to `backend/tests/test_money.py`:
+Create `backend/tests/test_money_models.py` with these imports and test:
 
 ```python
 from sqlalchemy import Numeric
@@ -309,7 +309,7 @@ async def test_tax_withholding():
 Run from `backend/` with the approved disposable test database:
 
 ```bash
-uv run pytest tests/test_money.py tests/test_commission.py tests/test_tax.py -v
+uv run pytest tests/test_money_models.py tests/test_commission.py tests/test_tax.py -v
 ```
 
 Expected before implementation: ORM assertions fail because the columns are Float; the 2.05 sale at 10% yields 0.20 rather than the required half-up 0.21; Decimal tax inputs are rejected by the float-only calculation.
@@ -343,7 +343,7 @@ Update `backend/app/services/commission.py` to convert percentage values with `D
 
 ```python
 gross = quantize_ledger_amount(
-    event.amount * Decimal(str(applicable.commission_percent)) / Decimal("100"),
+    event.amount * Decimal(str(applicable.commission_percent)) / Decimal(100),
     event.currency,
 )
 _, withholding, net = apply_tax(account, gross)
@@ -489,7 +489,7 @@ def downgrade() -> None:
 Run from `backend/`:
 
 ```bash
-uv run pytest tests/test_money.py tests/test_commission.py tests/test_tax.py tests/test_events.py -v
+uv run pytest tests/test_money.py tests/test_money_models.py tests/test_commission.py tests/test_tax.py tests/test_events.py -v
 ```
 
 Expected: PASS; model precision, Decimal commission/tax behavior, and current event ingestion all work on the ORM-created disposable test schema.
@@ -497,7 +497,7 @@ Expected: PASS; model precision, Decimal commission/tax behavior, and current ev
 Commit only the Task 3 files:
 
 ```bash
-git add backend/app/db/models.py backend/app/schemas/event.py backend/app/schemas/commission.py backend/app/schemas/contract.py backend/app/services/commission.py backend/app/services/tax.py backend/app/services/contract.py backend/app/services/affiliate_account.py backend/app/services/payment_record.py backend/app/api/v1/public/webhooks.py backend/alembic/versions/d4e5f6a7b8c9_ledger_amount_currency_invariants.py backend/tests/test_money.py backend/tests/test_commission.py backend/tests/test_tax.py
+git add backend/app/db/models.py backend/app/schemas/event.py backend/app/schemas/commission.py backend/app/schemas/contract.py backend/app/services/commission.py backend/app/services/tax.py backend/app/services/contract.py backend/app/services/affiliate_account.py backend/app/services/payment_record.py backend/app/api/v1/public/webhooks.py backend/alembic/versions/d4e5f6a7b8c9_ledger_amount_currency_invariants.py backend/tests/test_money.py backend/tests/test_money_models.py backend/tests/test_commission.py backend/tests/test_tax.py
 git commit -m "Store ledger amounts with decimal precision"
 ```
 
@@ -1172,7 +1172,7 @@ Do not delete anything except the named synthetic fixture from this disposable d
 Run from `backend/` with the approved disposable test database:
 
 ```bash
-uv run pytest tests/test_money.py tests/test_events.py tests/test_commission.py tests/test_tax.py tests/test_payout.py tests/test_balance.py tests/test_dashboard.py -v
+uv run pytest tests/test_money.py tests/test_money_models.py tests/test_events.py tests/test_commission.py tests/test_tax.py tests/test_payout.py tests/test_balance.py tests/test_dashboard.py -v
 uv run pytest tests/ -v
 ```
 
