@@ -1,15 +1,16 @@
 import datetime
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
-    JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -143,8 +144,8 @@ class Term(Base):
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=False)
     payment_sequence = Column(Integer, nullable=True)
     sequence_pattern = Column(String, nullable=False, default="*")
-    commission_percent = Column(Float, nullable=False)
-    minimum_threshold = Column(Float, nullable=True)
+    commission_percent = Column(Numeric(9, 6), nullable=False)
+    minimum_threshold = Column(Numeric(20, 2), nullable=True)
     effective_from = Column(Date, default=lambda: datetime.date.today())
     effective_to = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
@@ -185,8 +186,9 @@ class Event(Base):
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=True)
     customer_id = Column(String, nullable=True)
     customer_email = Column(String, nullable=True)
-    amount = Column(Float, default=0.0)
+    amount = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
+    commission_status = Column(String, nullable=True)
     payment_sequence = Column(Integer, default=1)
     good_date = Column(Date, nullable=True)
     payment_record_id = Column(String, nullable=True)
@@ -207,7 +209,7 @@ class PaymentRecord(Base):
     tenant_payment_id = Column(String, nullable=False, index=True)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     customer_id = Column(String, nullable=True)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(20, 2), nullable=False)
     currency = Column(String, default="USD")
     paid_at = Column(DateTime(timezone=True), default=now_utc)
     sequence_number = Column(Integer, default=1)
@@ -221,9 +223,9 @@ class Commission(Base):
     event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
     campaign_id = Column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True)
-    gross_amount = Column(Float, default=0.0)
-    withholding_amount = Column(Float, default=0.0)
-    net_amount = Column(Float, default=0.0)
+    gross_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    withholding_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    net_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     status = Column(String, default="pending")
     available_on = Column(Date, nullable=True)
@@ -240,11 +242,11 @@ class Payout(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    requested_amount = Column(Float, default=0.0)
-    approved_amount = Column(Float, default=0.0)
-    withholding_total = Column(Float, default=0.0)
-    paypal_fees = Column(Float, default=0.0)
-    net_paid = Column(Float, default=0.0)
+    requested_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    approved_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    withholding_total = Column(Numeric(20, 2), default=Decimal("0.00"))
+    paypal_fees = Column(Numeric(20, 2), default=Decimal("0.00"))
+    net_paid = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     paypal_batch_id = Column(String, nullable=True)
     status = Column(String, default="requested")
@@ -263,7 +265,7 @@ class PayoutCommission(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
     commission_id = Column(UUID(as_uuid=True), ForeignKey("commissions.id"), nullable=False)
-    amount = Column(Float, default=0.0)
+    amount = Column(Numeric(20, 2), default=Decimal("0.00"))
 
     payout = relationship("Payout", back_populates="payout_commissions")
     commission = relationship("Commission", back_populates="payout_commissions")

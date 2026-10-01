@@ -1,10 +1,18 @@
-import uuid
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Affiliate, AffiliateAccount, Commission, Contract, Event, PaymentRecord, Term
+from app.core.money import quantize_ledger_amount
+from app.db.models import (
+    Affiliate,
+    AffiliateAccount,
+    Commission,
+    Event,
+    PaymentRecord,
+    Term,
+)
 from app.services.contract import get_contract_for_affiliate
 from app.services.tax import apply_tax
 
@@ -47,7 +55,10 @@ async def calculate_from_sale_event(
     if applicable.minimum_threshold is not None and event.amount < applicable.minimum_threshold:
         return None
 
-    gross = round(event.amount * (applicable.commission_percent / 100.0), 2)
+    gross = quantize_ledger_amount(
+        event.amount * Decimal(str(applicable.commission_percent)) / Decimal(100),
+        event.currency,
+    )
 
     account = await db.get(AffiliateAccount, affiliate.affiliate_account_id)
     _, withholding, net = apply_tax(account, gross)
@@ -96,7 +107,7 @@ async def create_reversal(db: AsyncSession, event: Event, affiliate: Affiliate) 
         affiliate_id=affiliate.id,
         campaign_id=event.campaign_id,
         gross_amount=-event.amount,
-        withholding_amount=0.0,
+        withholding_amount=Decimal("0.00"),
         net_amount=-event.amount,
         currency=event.currency,
         status="reversed",

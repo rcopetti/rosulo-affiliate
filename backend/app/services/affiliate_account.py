@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.money import decimal_value
 from app.core.security import hash_password, verify_password
 from app.db.models import Affiliate, AffiliateAccount, AffiliateDocument, Contract, Tenant, Term
 from app.schemas.affiliate_account import AffiliateAccountCreate, AffiliateAccountUpdate
@@ -89,8 +90,12 @@ async def create_tenant_affiliate(db: AsyncSession, tenant: Tenant, data: Affili
         db.add(Term(
             contract_id=contract.id, payment_sequence=term.get("payment_sequence"),
             sequence_pattern=term.get("sequence_pattern", "*"),
-            commission_percent=term["commission_percent"],
-            minimum_threshold=term.get("minimum_threshold"),
+            commission_percent=decimal_value(term["commission_percent"]),
+            minimum_threshold=(
+                decimal_value(term["minimum_threshold"])
+                if term.get("minimum_threshold") is not None
+                else None
+            ),
             effective_from=term.get("effective_from") or date.today(),
             effective_to=term.get("effective_to"),
         ))

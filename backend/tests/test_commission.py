@@ -19,7 +19,16 @@ async def test_sale_generates_commission(
     invite = await client.post(
         "/api/v1/admin/affiliates",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"email": "commission@example.com"},
+        json={
+            "email": "commission@example.com",
+            "contract_terms": [
+                {
+                    "commission_percent": 10.0,
+                    "payment_sequence": 1,
+                    "minimum_threshold": 2.05,
+                }
+            ],
+        },
     )
     invite_token = invite.json()["token"]
 
@@ -53,13 +62,30 @@ async def test_sale_generates_commission(
                 "type": "sale",
                 "campaign_id": campaign_id,
                 "customer_id": "cust-1",
-                "amount": 100.0,
+                "amount": 2.05,
+                "currency": "USD",
                 "payment_sequence": 1,
                 "good_date": str(date.today()),
                 "payment_record_id": "comm-pay-1",
             },
         )
         assert r.status_code == 200
+
+    eur_sale = await client.post(
+        "/api/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "event_id": "commission-eur-below-threshold",
+            "type": "sale",
+            "campaign_id": campaign_id,
+            "customer_id": "cust-eur",
+            "amount": 2.04,
+            "currency": "EUR",
+            "payment_sequence": 1,
+            "good_date": str(date.today()),
+        },
+    )
+    assert eur_sale.status_code == 200
 
     # one commission from first sale
     comms = await client.get(
@@ -68,7 +94,7 @@ async def test_sale_generates_commission(
     )
     assert comms.status_code == 200
     assert len(comms.json()) == 1
-    assert comms.json()[0]["gross_amount"] == 10.0  # 10% default term
+    assert comms.json()[0]["gross_amount"] == 0.21  # 10% contract term
 
 
 @pytest.mark.asyncio

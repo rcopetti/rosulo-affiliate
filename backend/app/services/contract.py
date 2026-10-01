@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.money import decimal_value
 from app.db.models import Contract, Term
 from app.schemas.contract import TermCreate
 
@@ -29,8 +30,12 @@ async def add_term(db: AsyncSession, contract_id: uuid.UUID, data: dict) -> Term
         contract_id=contract_id,
         payment_sequence=data.get("payment_sequence"),
         sequence_pattern=data.get("sequence_pattern", "*"),
-        commission_percent=data["commission_percent"],
-        minimum_threshold=data.get("minimum_threshold"),
+        commission_percent=decimal_value(data["commission_percent"]),
+        minimum_threshold=(
+            decimal_value(data["minimum_threshold"])
+            if data.get("minimum_threshold") is not None
+            else None
+        ),
         effective_from=data.get("effective_from") or date.today(),
         effective_to=data.get("effective_to"),
     )
@@ -47,6 +52,8 @@ async def update_term(db: AsyncSession, term_id: uuid.UUID, data: dict) -> Term 
         return None
     for key, value in data.items():
         if value is not None and hasattr(term, key):
+            if key in {"commission_percent", "minimum_threshold"}:
+                value = decimal_value(value)
             setattr(term, key, value)
     await db.commit()
     await db.refresh(term)
@@ -75,8 +82,12 @@ async def sync_terms(db: AsyncSession, contract: Contract, terms_data: list[Term
             term = existing[term_id]
             term.payment_sequence = term_data.payment_sequence
             term.sequence_pattern = term_data.sequence_pattern
-            term.commission_percent = term_data.commission_percent
-            term.minimum_threshold = term_data.minimum_threshold
+            term.commission_percent = decimal_value(term_data.commission_percent)
+            term.minimum_threshold = (
+                decimal_value(term_data.minimum_threshold)
+                if term_data.minimum_threshold is not None
+                else None
+            )
             if term_data.effective_from is not None:
                 term.effective_from = term_data.effective_from
             if term_data.effective_to is not None:
@@ -88,8 +99,12 @@ async def sync_terms(db: AsyncSession, contract: Contract, terms_data: list[Term
                     contract_id=contract.id,
                     payment_sequence=term_data.payment_sequence,
                     sequence_pattern=term_data.sequence_pattern,
-                    commission_percent=term_data.commission_percent,
-                    minimum_threshold=term_data.minimum_threshold,
+                    commission_percent=decimal_value(term_data.commission_percent),
+                    minimum_threshold=(
+                        decimal_value(term_data.minimum_threshold)
+                        if term_data.minimum_threshold is not None
+                        else None
+                    ),
                     effective_from=term_data.effective_from or date.today(),
                     effective_to=term_data.effective_to,
                 )

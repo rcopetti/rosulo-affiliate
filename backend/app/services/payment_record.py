@@ -1,10 +1,10 @@
 from datetime import datetime
-from uuid import UUID
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Commission, Event, PaymentRecord, Tenant
+from app.db.models import PaymentRecord, Tenant
 
 
 async def upsert_payment_record(
@@ -12,7 +12,7 @@ async def upsert_payment_record(
     tenant: Tenant,
     tenant_payment_id: str,
     customer_id: str,
-    amount: float,
+    amount: Decimal,
     currency: str,
     sequence_number: int,
     status: str,

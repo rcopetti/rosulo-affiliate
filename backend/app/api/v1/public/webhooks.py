@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_tenant
+from app.core.money import normalize_provider_amount
 from app.db.dependencies import get_db
 from app.db.models import Tenant
-from app.services import payment_record as payment_service
 from app.services import commission as commission_service
-from app.services import event as event_service
+from app.services import payment_record as payment_service
 
 router = APIRouter()
 
@@ -22,7 +22,7 @@ async def tenant_webhook(
         tenant,
         payload.get("payment_record_id"),
         payload.get("customer_id"),
-        float(payload.get("amount", 0)),
+        normalize_provider_amount(payload.get("amount", 0)),
         payload.get("currency", "USD"),
         int(payload.get("sequence_number", 1)),
         payload.get("status", "paid"),
