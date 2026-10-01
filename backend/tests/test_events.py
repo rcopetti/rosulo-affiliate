@@ -1,16 +1,20 @@
 import uuid
+from datetime import date
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
+from app.core import money
 from app.core.security import hash_api_key
 from app.db.models import Affiliate, AffiliateAccount, Campaign, Commission, Event, Tenant
 from app.db.session import async_session
 
 
 @pytest.mark.asyncio
-async def test_event_ingestion(client: AsyncClient, tenant: Tenant, tenant_user):
+async def test_event_ingestion(
+    client: AsyncClient, tenant: Tenant, tenant_user, monkeypatch
+):
     admin_login = await client.post(
         "/api/v1/auth/tenant/login",
         json={"email": "admin@allbum.me", "password": "admin123"},
@@ -90,6 +94,67 @@ async def test_event_ingestion(client: AsyncClient, tenant: Tenant, tenant_user)
             select(func.count(Commission.id)).where(
                 Commission.event_id == uuid.UUID(sale.json()["id"])
             )
+        )
+    assert commission_count == 1
+
+    unsupported_payload = {
+        "event_id": "unsupported-currency-sale",
+        "type": "sale",
+        "campaign_id": campaign_id,
+        "customer_id": "unsupported-currency-customer",
+        "amount": 10.005,
+        "currency": "XYZ",
+        "payment_sequence": 1,
+        "good_date": str(date.today()),
+        "payment_record_id": "unsupported-currency-payment",
+    }
+    invalid_currency_payload = {
+        **unsupported_payload,
+        "event_id": "invalid-currency-sale",
+        "currency": "US1",
+    }
+    try:
+        invalid_currency = await client.post(
+            "/api/v1/events",
+            headers={"X-API-Key": "test-api-key"},
+            json=invalid_currency_payload,
+        )
+    except ValueError as exc:
+        pytest.fail(f"invalid currency syntax should return HTTP 422: {exc}")
+    assert invalid_currency.status_code == 422
+
+    try:
+        unsupported = await client.post(
+            "/api/v1/events",
+            headers={"X-API-Key": "test-api-key"},
+            json=unsupported_payload,
+        )
+    except ValueError as exc:
+        pytest.fail(f"unsupported currency should be held instead of raising: {exc}")
+    assert unsupported.status_code == 200
+    assert unsupported.json()["currency"] == "XYZ"
+    assert unsupported.json()["amount"] == 10.01
+    assert unsupported.json()["commission_status"] == "currency_unsupported"
+
+    event_uuid = uuid.UUID(unsupported.json()["id"])
+    async with async_session() as db:
+        commission_count = await db.scalar(
+            select(func.count(Commission.id)).where(Commission.event_id == event_uuid)
+        )
+    assert commission_count == 0
+
+    monkeypatch.setitem(money.SUPPORTED_CURRENCY_EXPONENTS, "XYZ", 2)
+    replay = await client.post(
+        "/api/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json=unsupported_payload,
+    )
+    assert replay.status_code == 200
+    assert replay.json()["commission_status"] is None
+
+    async with async_session() as db:
+        commission_count = await db.scalar(
+            select(func.count(Commission.id)).where(Commission.event_id == event_uuid)
         )
     assert commission_count == 1
 

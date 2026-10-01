@@ -15,7 +15,7 @@ class EventCreate(BaseModel):
     customer_id: str | None = None
     customer_email: str | None = None
     amount: Decimal = Decimal("0.00")
-    currency: str = "USD"
+    currency: str = Field("USD", pattern="^[A-Za-z]{3}$")
     payment_sequence: int = 0
     good_date: date | None = None
     payment_record_id: str | None = None

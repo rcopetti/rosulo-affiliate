@@ -18,7 +18,7 @@
 - Modify `backend/app/schemas/event.py`, `backend/app/schemas/commission.py`, `backend/app/schemas/payout.py`, `backend/app/schemas/contract.py`, and `backend/app/schemas/dashboard.py`: parse money/percentages as Decimal internally, preserve numeric JSON response fields, and add currency-scoped balance fields.
 - Modify `backend/app/services/event.py`, `backend/app/services/commission.py`, `backend/app/services/tax.py`, `backend/app/services/payment_record.py`, `backend/app/services/payout.py`, `backend/app/services/dashboard.py`, `backend/app/services/contract.py`, and `backend/app/services/affiliate_account.py`: use Decimal arithmetic and currency-aware selection/aggregation.
 - Create `backend/app/services/balance.py`: shared currency-scoped affiliate balance projection used by the balance route and dashboard.
-- Modify `backend/app/api/v1/affiliate/balance.py`, `backend/app/api/v1/affiliate/payouts.py`, `backend/app/api/v1/public/events.py`, and `backend/app/api/v1/public/webhooks.py`: expose per-currency balances, require a payout currency, and parse incoming amounts as Decimal.
+- Modify `backend/app/api/v1/affiliate/balance.py`, `backend/app/api/v1/affiliate/payouts.py`, and `backend/app/api/v1/public/webhooks.py`: expose per-currency balances, require a payout currency, and parse incoming amounts as Decimal.
 - Modify `backend/tests/test_commission.py`, `backend/tests/test_dashboard.py`, `backend/tests/test_events.py`, `backend/tests/test_payout.py`, and `backend/tests/test_tax.py`; create `backend/tests/test_money.py`, `backend/tests/test_money_models.py`, and `backend/tests/test_balance.py`.
 - Modify `frontend/src/api/types.ts` (including `Event.commission_status`), `frontend/src/api/affiliate/payouts.ts`, `frontend/src/components/affiliate/BalanceSummary.tsx`, `frontend/src/components/affiliate/SalesBySequenceChart.tsx`, `frontend/src/components/admin/CommissionLiability.tsx`, `frontend/src/pages/affiliate/BalancePage.tsx`, `frontend/src/pages/affiliate/RequestPayoutPage.tsx`, and `frontend/src/pages/affiliate/DashboardPage.tsx`; create `frontend/src/components/affiliate/CurrencyBalances.tsx` and `frontend/src/tests/components/CurrencyBalances.test.tsx`.
 - Update only Workstream 0.5’s checkboxes/status in `docs/superpowers/plans/2026-09-30-affiliate-service-next-phase-execution-plan.md` after all acceptance criteria pass.
@@ -340,7 +340,7 @@ In `backend/app/db/models.py`, import `Decimal` and SQLAlchemy `Numeric`; remove
 
 - [ ] **Step 2: Update schemas to parse money as Decimal while preserving numeric JSON responses**
 
-In `backend/app/schemas/event.py`, import `Decimal`, use `amount: Decimal = Decimal("0.00")` in `EventCreate`, retain `EventOut.amount: float`, and add `commission_status: str | None = None`. In `backend/app/schemas/commission.py`, keep output amount fields as `float`. In `backend/app/schemas/contract.py`, use Decimal for `TermBase.commission_percent`, `TermBase.minimum_threshold`, and `TermUpdate` equivalents; keep `TermOut` monetary/rate values as float response fields.
+In `backend/app/schemas/event.py`, import `Decimal`, use `amount: Decimal = Decimal("0.00")` in `EventCreate`, validate `currency` with `Field("USD", pattern="^[A-Za-z]{3}$")` while allowing codes outside the ledger allowlist, retain `EventOut.amount: float`, and add `commission_status: str | None = None`. In `backend/app/schemas/commission.py`, keep output amount fields as `float`. In `backend/app/schemas/contract.py`, use Decimal for `TermBase.commission_percent`, `TermBase.minimum_threshold`, and `TermUpdate` equivalents; keep `TermOut` monetary/rate values as float response fields.
 
 - [ ] **Step 3: Use Decimal for commission, tax, and contract calculations**
 
@@ -509,7 +509,6 @@ git commit -m "Store ledger amounts with decimal precision"
 ### Task 4: Add currency-aware event commission handling
 
 **Files:**
-- Modify: `backend/app/api/v1/public/events.py`
 - Modify: `backend/app/services/event.py`
 - Modify: `backend/app/services/commission.py`
 - Modify: `backend/app/schemas/event.py`
@@ -584,11 +583,11 @@ Run from `backend/`:
 uv run pytest tests/test_events.py::test_event_ingestion -v
 ```
 
-Expected before implementation: the response has no `commission_status`, and the current service attempts to calculate commissions without checking whether the currency is enabled.
+Expected before implementation: the event is inserted, then commission quantization raises `Unsupported ledger currency` instead of returning the accepted Event with a held status.
 
 - [ ] **Step 3: Implement the currency hold and replay behavior**
 
-In the sale commission path, check `is_supported_currency(event.currency)` before calculating a Commission. For unsupported currency, set `event.commission_status = "currency_unsupported"`, commit that event state, and return without creating a Commission. For a supported currency, create the Commission exactly once and clear the blocked state. Keep the route’s tenant-scoped event idempotency and commission-count check so replaying the event after currency support is added can create the missing Commission.
+In `backend/app/services/event.py`, normalize currency codes with `normalize_currency_code` and quantize source amounts with `normalize_provider_amount`; do not reject a syntactically valid code because it is not in the ledger allowlist. In the sale commission path, check `is_supported_currency(event.currency)` before contract/amount calculation. For unsupported currency, set `event.commission_status = "currency_unsupported"`, commit that event state, and return without creating a Commission. For a supported currency, create the Commission exactly once and clear the blocked state. Keep the route’s tenant-scoped event idempotency and commission-count check so replaying the event after currency support is added can create the missing Commission.
 
 - [ ] **Step 4: Re-run the event tests**
 
@@ -600,10 +599,63 @@ uv run pytest tests/test_events.py -v
 
 Expected: PASS for stored unsupported-currency events, visible blocked state, and exactly-once commission creation after support is enabled.
 
-- [ ] **Step 5: Commit the unsupported-currency handling**
+- [ ] **Step 5: Add a failing invalid-currency syntax assertion**
+
+Append this block after the unsupported-currency payload is declared:
+
+```python
+    invalid_currency_payload = {
+        **unsupported_payload,
+        "event_id": "invalid-currency-sale",
+        "currency": "US1",
+    }
+    try:
+        invalid_currency = await client.post(
+            "/api/v1/events",
+            headers={"X-API-Key": "test-api-key"},
+            json=invalid_currency_payload,
+        )
+    except ValueError as exc:
+        pytest.fail(f"invalid currency syntax should return HTTP 422: {exc}")
+    assert invalid_currency.status_code == 422
+```
+
+The current service raises `ValueError` for malformed syntax; the explicit `pytest.fail` names the missing API validation.
+
+- [ ] **Step 6: Run the invalid-currency test and confirm it fails**
+
+Run from `backend/`:
 
 ```bash
-git add backend/app/services/event.py backend/app/services/commission.py backend/app/api/v1/public/events.py backend/tests/test_events.py
+uv run pytest tests/test_events.py::test_event_ingestion -v
+```
+
+Expected: FAIL because malformed currency syntax reaches `normalize_currency_code` and becomes a server exception instead of a validation response.
+
+- [ ] **Step 7: Validate currency syntax at the EventCreate boundary**
+
+In `backend/app/schemas/event.py`, declare:
+
+```python
+currency: str = Field("USD", pattern="^[A-Za-z]{3}$")
+```
+
+This rejects malformed codes with HTTP 422 while still accepting valid three-letter codes outside USD/EUR/BRL; `backend/app/services/event.py` normalizes accepted codes to uppercase.
+
+- [ ] **Step 8: Re-run the event tests**
+
+Run from `backend/`:
+
+```bash
+uv run pytest tests/test_events.py -v
+```
+
+Expected: PASS for malformed-code 422 validation, unsupported-code hold, and replay after support is enabled.
+
+- [ ] **Step 9: Commit the unsupported-currency handling**
+
+```bash
+git add backend/app/services/event.py backend/app/services/commission.py backend/app/schemas/event.py backend/tests/test_events.py docs/superpowers/plans/2026-09-30-ledger-amount-currency-invariants.md
 git commit -m "Hold unsupported-currency commissions for replay"
 ```
 
