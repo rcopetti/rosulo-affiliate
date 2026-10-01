@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.money import quantize_ledger_amount
+from app.core.money import is_supported_currency, quantize_ledger_amount
 from app.db.models import (
     Affiliate,
     AffiliateAccount,
@@ -20,8 +20,17 @@ from app.services.tax import apply_tax
 async def calculate_from_sale_event(
     db: AsyncSession, event: Event, affiliate: Affiliate
 ) -> Commission | None:
+    if not is_supported_currency(event.currency):
+        event.commission_status = "currency_unsupported"
+        await db.commit()
+        return None
+
+    was_held_for_currency = event.commission_status == "currency_unsupported"
     contract = await get_contract_for_affiliate(db, affiliate.id)
     if not contract:
+        if was_held_for_currency:
+            event.commission_status = None
+            await db.commit()
         return None
 
     today = date.today()
@@ -50,9 +59,15 @@ async def calculate_from_sale_event(
 
     # No term covers this payment sequence: the sale stays a merchant record only.
     if not applicable:
+        if was_held_for_currency:
+            event.commission_status = None
+            await db.commit()
         return None
 
     if applicable.minimum_threshold is not None and event.amount < applicable.minimum_threshold:
+        if was_held_for_currency:
+            event.commission_status = None
+            await db.commit()
         return None
 
     gross = quantize_ledger_amount(
@@ -62,6 +77,8 @@ async def calculate_from_sale_event(
 
     account = await db.get(AffiliateAccount, affiliate.affiliate_account_id)
     _, withholding, net = apply_tax(account, gross)
+    if was_held_for_currency:
+        event.commission_status = None
 
     commission = Commission(
         event_id=event.id,
