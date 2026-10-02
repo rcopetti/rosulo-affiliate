@@ -7,6 +7,12 @@ import { PdfViewer } from '@/components/ui/PdfViewer';
 import { useToast } from '@/components/ui/Toast';
 import { formatDateTime } from '@/lib/utils';
 
+const IRS_FORM_URLS: Record<string, string> = {
+  'W-8BEN': 'https://www.irs.gov/pub/irs-pdf/fw8ben.pdf',
+  'W-8BEN-E': 'https://www.irs.gov/pub/irs-pdf/fw8bene.pdf',
+  'W-9': 'https://www.irs.gov/pub/irs-pdf/fw9.pdf',
+};
+
 interface KycUploaderProps {
   requiredDocumentType?: string;
   documents?: AffiliateDocument[];
@@ -66,6 +72,16 @@ export function KycUploader({
     <div className="space-y-3">
       <div className="rounded-lg border border-line bg-surface-muted p-3 text-sm text-fg-muted">
         Required document: <strong className="text-fg">{requiredType}</strong>
+        {IRS_FORM_URLS[requiredType] && (
+          <a
+            href={IRS_FORM_URLS[requiredType]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 text-primary hover:underline"
+          >
+            Download blank {requiredType} (irs.gov)
+          </a>
+        )}
         <span className="mt-1 block text-xs">Documents are encrypted on the server and can only be viewed through this authenticated session. Download is not provided.</span>
       </div>
       {payoutEligibility && (

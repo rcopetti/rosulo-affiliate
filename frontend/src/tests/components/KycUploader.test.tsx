@@ -77,4 +77,19 @@ describe('KycUploader', () => {
       screen.getByRole('button', { name: 'Replace W-9' })
     ).toBeInTheDocument();
   });
+
+  it('links the required form to its IRS PDF', () => {
+    render(
+      <ToastProvider>
+        <KycUploader requiredDocumentType="W-8BEN-E" documents={[]} isLoading={false} />
+      </ToastProvider>
+    );
+
+    const link = screen.getByRole('link', { name: /W-8BEN-E/i });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://www.irs.gov/pub/irs-pdf/fw8bene.pdf'
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+  });
 });
