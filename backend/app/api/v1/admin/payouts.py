@@ -25,7 +25,11 @@ async def get_payout(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    return await payout_service.get_payout(db, uuid.UUID(payout_id), tenant)
+    payout = await payout_service.get_payout(db, uuid.UUID(payout_id), tenant)
+    if not payout:
+        # Same 404 for unknown and cross-tenant IDs: never reveal existence.
+        raise HTTPException(status_code=404, detail="Payout not found")
+    return payout
 
 
 @router.post("/{payout_id}/approve", response_model=PayoutOut)

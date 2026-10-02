@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.money import is_supported_currency, normalize_currency_code, quantize_ledger_amount
 from app.db.models import (
@@ -116,8 +117,7 @@ async def request_payout(
             status_code=409,
             detail="One or more commissions are not available for payout",
         ) from exc
-    await db.refresh(payout)
-    return payout
+    return await _load_payout_detail(db, payout.id)
 
 
 def _integrity_constraint_name(exc: IntegrityError) -> str | None:
@@ -146,9 +146,40 @@ def _integrity_constraint_name(exc: IntegrityError) -> str | None:
     return None
 
 
+def payout_detail_options():
+    """Eagerly load everything ``PayoutOut`` serializes.
+
+    ``affiliate.account`` and each link's ``commission``/``commission.event``
+    are plain lazy relationships; resolving them during response
+    serialization would raise ``MissingGreenlet`` under asyncio, so they must
+    arrive with the payout row.
+    """
+    return (
+        selectinload(Payout.affiliate).selectinload(Affiliate.account),
+        selectinload(Payout.payout_commissions)
+        .selectinload(PayoutCommission.commission)
+        .selectinload(Commission.event),
+        selectinload(Payout.payout_payment),
+        selectinload(Payout.transitions),
+    )
+
+
+async def _load_payout_detail(db: AsyncSession, payout_id: uuid.UUID) -> Payout:
+    """Re-read a payout with the full detail graph after a state change."""
+    result = await db.execute(
+        select(Payout)
+        .where(Payout.id == payout_id)
+        .options(*payout_detail_options())
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one()
+
+
 async def get_payout(db: AsyncSession, payout_id: uuid.UUID, tenant: Tenant) -> Payout | None:
     result = await db.execute(
-        select(Payout).where(Payout.id == payout_id, Payout.tenant_id == tenant.id)
+        select(Payout)
+        .where(Payout.id == payout_id, Payout.tenant_id == tenant.id)
+        .options(*payout_detail_options())
     )
     return result.scalar_one_or_none()
 
@@ -165,8 +196,7 @@ async def approve_payout(
     payout.approved_at = datetime.now(timezone.utc)
     await _record_transition(db, payout, previous_status, payout.status, reviewer)
     await db.commit()
-    await db.refresh(payout)
-    return payout
+    return await _load_payout_detail(db, payout.id)
 
 
 async def reject_payout(
@@ -187,8 +217,7 @@ async def reject_payout(
     payout.status = "rejected"
     await _record_transition(db, payout, previous_status, payout.status, reviewer)
     await db.commit()
-    await db.refresh(payout)
-    return payout
+    return await _load_payout_detail(db, payout.id)
 
 
 async def confirm_payout_payment(
@@ -220,7 +249,7 @@ async def confirm_payout_payment(
             and existing.paid_at == paid_at
             and existing.transfer_reference.strip() == transfer_reference
         ):
-            return payout
+            return await _load_payout_detail(db, payout.id)
         raise HTTPException(status_code=409, detail="Payout was confirmed with different payment details")
     if payout.status != "approved":
         raise HTTPException(status_code=400, detail="Payout must be approved before payment confirmation")
@@ -259,8 +288,7 @@ async def confirm_payout_payment(
         raise HTTPException(
             status_code=409, detail="Payout payment already recorded"
         ) from exc
-    await db.refresh(payout)
-    return payout
+    return await _load_payout_detail(db, payout.id)
 
 
 async def _verify_linked_commissions(
@@ -363,5 +391,9 @@ async def _record_transition(
 
 
 async def list_payouts(db: AsyncSession, tenant: Tenant):
-    result = await db.execute(select(Payout).where(Payout.tenant_id == tenant.id))
+    result = await db.execute(
+        select(Payout)
+        .where(Payout.tenant_id == tenant.id)
+        .options(*payout_detail_options())
+    )
     return result.scalars().all()

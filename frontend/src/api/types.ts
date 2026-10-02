@@ -118,11 +118,13 @@ export interface Commission {
 }
 
 export interface PayoutPaymentConfirmation {
-  payment_method: string;
+  /** ISO-8601 timestamp with an explicit offset; the browser-local
+   * datetime-local value must be converted before submitting. */
+  paid_at: string;
   transfer_reference: string;
 }
 
-export interface PayoutPaymentRecord {
+export interface PayoutPayment {
   id: string;
   payout_id: string;
   amount: number;
@@ -143,23 +145,48 @@ export interface PayoutTransition {
   created_at: string;
 }
 
+export type PayoutStatus = 'pending_approval' | 'approved' | 'rejected' | 'paid';
+
+export interface PayoutPayee {
+  name: string;
+  email: string;
+  paypal_email?: string | null;
+}
+
+export interface PayoutCommissionDetail {
+  commission_id: string;
+  event_id: string;
+  occurred_at?: string | null;
+  good_date?: string | null;
+  payment_sequence?: number | null;
+  gross_amount: number;
+  withholding_amount: number;
+  net_amount: number;
+  currency: string;
+  campaign_id?: string | null;
+}
+
 export interface Payout {
   id: string;
   affiliate_id: string;
+  tenant_id?: string;
   requested_amount: number;
   approved_amount: number;
   withholding_total: number;
   paypal_fees: number;
   net_paid: number;
   currency: string;
-  status: 'requested' | 'pending_approval' | 'approved' | 'processing' | 'paid' | 'failed' | 'rejected';
+  status: PayoutStatus;
   requested_at: string;
-  approved_at?: string;
-  paid_at?: string;
-  paypal_batch_id?: string;
-  payment_record?: PayoutPaymentRecord | null;
+  approved_at?: string | null;
+  paid_at?: string | null;
+  affiliate?: PayoutPayee;
+  payout_commissions?: PayoutCommissionDetail[];
+  commission_count?: number;
+  earliest_sale_at?: string | null;
+  latest_sale_at?: string | null;
+  payout_payment?: PayoutPayment | null;
   transitions?: PayoutTransition[];
-  commissions?: Commission[];
 }
 
 export interface PayoutRequestPayload {

@@ -27,5 +27,9 @@ async def list_payouts(
     affiliate: Affiliate = Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Payout).where(Payout.affiliate_id == affiliate.id))
+    result = await db.execute(
+        select(Payout)
+        .where(Payout.affiliate_id == affiliate.id)
+        .options(*payout_service.payout_detail_options())
+    )
     return result.scalars().all()

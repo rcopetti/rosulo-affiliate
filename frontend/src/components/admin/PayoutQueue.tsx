@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Payout, PayoutPaymentConfirmation } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Column } from '@/components/ui/DataTable';
+import { PayoutDetail } from '@/components/admin/PayoutDetail';
 import { PayoutStatusBadge } from '@/components/shared/PayoutStatusBadge';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
@@ -15,24 +16,33 @@ interface PayoutQueueProps {
 }
 
 export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: PayoutQueueProps) {
-  const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState('');
+  const [detailPayout, setDetailPayout] = useState<Payout | null>(null);
+  const [paymentPayout, setPaymentPayout] = useState<Payout | null>(null);
+  const [paidAt, setPaidAt] = useState('');
   const [transferReference, setTransferReference] = useState('');
 
-  const closeConfirmation = () => {
-    setSelectedPayout(null);
-    setPaymentMethod('');
+  const closePayment = () => {
+    setPaymentPayout(null);
+    setPaidAt('');
     setTransferReference('');
   };
 
+  const paidAtDate = paidAt ? new Date(paidAt) : null;
+  const paidAtValid =
+    paidAtDate !== null && !Number.isNaN(paidAtDate.getTime()) && paidAtDate.getTime() <= Date.now();
+  const canConfirm = paidAtValid && transferReference.trim().length > 0;
+
   const confirmPayment = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedPayout || !paymentMethod.trim() || !transferReference.trim()) return;
-    onConfirmPayment(selectedPayout.id, {
-      payment_method: paymentMethod.trim(),
+    if (!paymentPayout || !paidAtDate || !paidAtValid || !transferReference.trim()) return;
+    // datetime-local yields a browser-local time; submit it as an ISO-8601
+    // timestamp with an explicit offset. Amount, currency, method, and
+    // commission membership stay server-derived.
+    onConfirmPayment(paymentPayout.id, {
+      paid_at: paidAtDate.toISOString(),
       transfer_reference: transferReference.trim(),
     });
-    closeConfirmation();
+    closePayment();
   };
 
   const columns: Column<Payout>[] = [
@@ -42,6 +52,12 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
       render: (p) => <span className="whitespace-nowrap text-xs">{formatDateTime(p.requested_at)}</span>,
       sortValue: (p) => new Date(p.requested_at).getTime(),
       headerClassName: 'w-44',
+    },
+    {
+      key: 'affiliate',
+      header: 'Affiliate',
+      render: (p) => <span className="whitespace-nowrap">{p.affiliate?.name ?? '—'}</span>,
+      headerClassName: 'w-40',
     },
     {
       key: 'requested_amount',
@@ -63,22 +79,22 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
       render: (p) => (
         <div className="flex gap-2">
           {p.status === 'pending_approval' && (
-            <>
-              <Button size="sm" onClick={() => onApprove(p.id)}>
-                Approve
-              </Button>
-              <Button variant="danger" size="sm" onClick={() => onReject(p.id)}>
-                Reject
-              </Button>
-            </>
+            <Button size="sm" onClick={() => setDetailPayout(p)}>
+              Review
+            </Button>
           )}
           {p.status === 'approved' && (
             <Button
               size="sm"
               aria-label={`Record payment for payout ${p.id}`}
-              onClick={() => setSelectedPayout(p)}
+              onClick={() => setPaymentPayout(p)}
             >
               Record payment
+            </Button>
+          )}
+          {(p.status === 'paid' || p.status === 'rejected') && (
+            <Button variant="secondary" size="sm" onClick={() => setDetailPayout(p)}>
+              View
             </Button>
           )}
         </div>
@@ -96,26 +112,93 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
         emptyTitle="Payout queue is empty"
         emptyDescription="Payout requests from affiliates will appear here for approval."
       />
+
       <Modal
-        open={selectedPayout !== null}
-        onClose={closeConfirmation}
-        title="Record manual payout"
+        open={detailPayout !== null}
+        onClose={() => setDetailPayout(null)}
+        title="Payout detail"
+        className="max-w-3xl"
       >
-        {selectedPayout && (
+        {detailPayout && (
+          <div className="space-y-4">
+            <PayoutDetail payout={detailPayout} />
+            {detailPayout.status === 'pending_approval' && (
+              <div className="flex justify-end gap-2 border-t border-line pt-4">
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    onReject(detailPayout.id);
+                    setDetailPayout(null);
+                  }}
+                >
+                  Reject
+                </Button>
+                <Button
+                  onClick={() => {
+                    onApprove(detailPayout.id);
+                    setDetailPayout(null);
+                  }}
+                >
+                  Approve
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={paymentPayout !== null}
+        onClose={closePayment}
+        title="Record PayPal payment"
+      >
+        {paymentPayout && (
           <form className="space-y-4" onSubmit={confirmPayment}>
             <p className="text-sm text-fg-muted">
-              Confirm that {formatCurrency(selectedPayout.net_paid, selectedPayout.currency)} was sent to the affiliate.
+              Confirm the PayPal transfer for this payout. Amount, currency, method, and
+              commission membership are fixed by the approved payout.
             </p>
+            <div className="space-y-1 rounded-md bg-surface-muted p-3 text-sm text-slate-700">
+              {paymentPayout.affiliate && (
+                <>
+                  <p>
+                    <span className="font-medium">Affiliate:</span> {paymentPayout.affiliate.name}
+                  </p>
+                  <p>
+                    <span className="font-medium">Email:</span> {paymentPayout.affiliate.email}
+                  </p>
+                </>
+              )}
+              <p>
+                <span className="font-medium">PayPal email:</span>{' '}
+                {paymentPayout.affiliate?.paypal_email ?? '—'}
+              </p>
+              <p>
+                <span className="font-medium">Net payout:</span>{' '}
+                {formatCurrency(paymentPayout.net_paid, paymentPayout.currency)}
+              </p>
+              <p>
+                <span className="font-medium">Payment method:</span> PayPal
+              </p>
+              <p>
+                <span className="font-medium">Commissions:</span>{' '}
+                {paymentPayout.commission_count ?? paymentPayout.payout_commissions?.length ?? 0}{' '}
+                {(paymentPayout.commission_count ?? paymentPayout.payout_commissions?.length ?? 0) ===
+                1
+                  ? 'commission'
+                  : 'commissions'}
+              </p>
+            </div>
             <Input
-              label="Payment method"
-              name="payment_method"
-              maxLength={50}
-              value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value)}
+              label="Paid at"
+              name="paid_at"
+              type="datetime-local"
+              value={paidAt}
+              onChange={(event) => setPaidAt(event.target.value)}
               required
             />
             <Input
-              label="Transfer reference"
+              label="PayPal transaction reference"
               name="transfer_reference"
               maxLength={255}
               value={transferReference}
@@ -123,13 +206,10 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
               required
             />
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={closeConfirmation}>
+              <Button type="button" variant="secondary" onClick={closePayment}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={!paymentMethod.trim() || !transferReference.trim()}
-              >
+              <Button type="submit" disabled={!canConfirm}>
                 Confirm payment
               </Button>
             </div>

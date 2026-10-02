@@ -43,10 +43,10 @@ const columns: Column<Payout>[] = [
   {
     key: 'transfer',
     header: 'Transfer',
-    render: (p) => p.payment_record ? (
+    render: (p) => p.payout_payment ? (
       <span className="space-y-1 text-xs">
-        <span className="block capitalize">{p.payment_record.payment_method.replace(/_/g, ' ')}</span>
-        <span className="block font-mono">{p.payment_record.transfer_reference}</span>
+        <span className="block capitalize">{p.payout_payment.payment_method.replace(/_/g, ' ')}</span>
+        <span className="block font-mono">{p.payout_payment.transfer_reference}</span>
       </span>
     ) : <span className="text-fg-subtle">—</span>,
     headerClassName: 'w-48',

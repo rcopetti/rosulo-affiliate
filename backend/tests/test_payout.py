@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import func, select, update
 
+from app.core.security import hash_api_key, hash_password
 from app.db.models import (
     Affiliate,
     AffiliateAccount,
@@ -19,6 +20,7 @@ from app.db.models import (
     PayoutNotification,
     PayoutPayment,
     Tenant,
+    TenantUser,
 )
 from app.db.session import async_session
 from app.queue.handlers import handle_payout
@@ -1120,3 +1122,148 @@ async def test_confirm_payment_endpoint_validates_payload(
     payout = await client.get(url.rsplit("/confirm-payment", 1)[0], headers=admin_headers)
     assert payout.json()["status"] == "approved"
     assert payout.json()["payout_payment"] is None
+
+
+DETAIL_SALE_FIRST = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
+DETAIL_SALE_SECOND = datetime(2026, 9, 25, 8, 30, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_payout_detail_returns_itemized_commissions_and_payee(
+    client: AsyncClient, payout_scenario
+):
+    first = await payout_scenario.create_commission(
+        PAST_DUE, "detail-1", status="available"
+    )
+    second = await payout_scenario.create_commission(
+        PAST_DUE - timedelta(days=3), "detail-2", status="available"
+    )
+
+    # Pin distinct source-sale timestamps and sequences so the returned
+    # window/line fields are verifiable rather than all "now".
+    async with payout_scenario.db_session() as db:
+        events = (
+            await db.execute(
+                select(Event).where(
+                    Event.event_id.in_(["sale-detail-1", "sale-detail-2"])
+                )
+            )
+        ).scalars().all()
+        by_key = {event.event_id: event for event in events}
+        by_key["sale-detail-1"].occurred_at = DETAIL_SALE_FIRST
+        by_key["sale-detail-1"].payment_sequence = 1
+        by_key["sale-detail-2"].occurred_at = DETAIL_SALE_SECOND
+        by_key["sale-detail-2"].payment_sequence = 2
+        await db.commit()
+        event_row_ids = {key: str(event.id) for key, event in by_key.items()}
+
+    request = await _payout_request(
+        client,
+        payout_scenario,
+        {"currency": "USD", "commission_ids": [str(first), str(second)]},
+    )
+    assert request.status_code == 200
+    payout_id = request.json()["id"]
+
+    detail = await client.get(
+        f"/api/v1/admin/payouts/{payout_id}",
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+    )
+
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["status"] == "pending_approval"
+    assert "paypal_batch_id" not in body
+    assert "payment_record" not in body
+
+    # Payee identity comes from the affiliate's account record.
+    assert body["affiliate"]["name"] == "Payout Scenario Tester"
+    assert body["affiliate"]["email"] == "payout-scenario@example.com"
+    assert body["affiliate"]["paypal_email"] == "payout-scenario@example.com"
+
+    lines = body["payout_commissions"]
+    assert body["commission_count"] == 2
+    assert len(lines) == 2
+    by_commission = {line["commission_id"]: line for line in lines}
+    assert set(by_commission) == {str(first), str(second)}
+
+    first_line = by_commission[str(first)]
+    assert first_line["event_id"] == event_row_ids["sale-detail-1"]
+    assert datetime.fromisoformat(first_line["occurred_at"]) == DETAIL_SALE_FIRST
+    assert first_line["good_date"] == str(PAST_DUE)
+    assert first_line["payment_sequence"] == 1
+    assert first_line["gross_amount"] == 10.0
+    assert first_line["withholding_amount"] == 0.0
+    assert first_line["net_amount"] == 10.0
+    assert first_line["currency"] == "USD"
+    assert first_line["campaign_id"] == str(payout_scenario.campaign_id)
+
+    second_line = by_commission[str(second)]
+    assert second_line["event_id"] == event_row_ids["sale-detail-2"]
+    assert datetime.fromisoformat(second_line["occurred_at"]) == DETAIL_SALE_SECOND
+    assert second_line["good_date"] == str(PAST_DUE - timedelta(days=3))
+    assert second_line["payment_sequence"] == 2
+
+    # Lines reconcile to the payout totals and the source-sale window.
+    assert sum(line["gross_amount"] for line in lines) == body["requested_amount"]
+    assert sum(line["withholding_amount"] for line in lines) == body["withholding_total"]
+    assert sum(line["net_amount"] for line in lines) == body["net_paid"]
+    assert datetime.fromisoformat(body["earliest_sale_at"]) == DETAIL_SALE_FIRST
+    assert datetime.fromisoformat(body["latest_sale_at"]) == DETAIL_SALE_SECOND
+
+
+@pytest.mark.asyncio
+async def test_payout_detail_unknown_payout_returns_404(
+    client: AsyncClient, payout_scenario
+):
+    response = await client.get(
+        f"/api/v1/admin/payouts/{uuid.uuid4()}",
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_payout_detail_hides_other_tenants_payout(
+    client: AsyncClient, payout_scenario
+):
+    commission_id = await payout_scenario.create_commission(
+        PAST_DUE, "detail-iso-1", status="available"
+    )
+    request = await _payout_request(
+        client,
+        payout_scenario,
+        {"currency": "USD", "commission_ids": [str(commission_id)]},
+    )
+    assert request.status_code == 200
+    payout_id = request.json()["id"]
+
+    async with payout_scenario.db_session() as db:
+        other_tenant = Tenant(
+            name="other-co", api_key_hash=hash_api_key("other-key")
+        )
+        db.add(other_tenant)
+        await db.flush()
+        db.add(
+            TenantUser(
+                tenant_id=other_tenant.id,
+                email="admin@other.co",
+                password_hash=hash_password("admin123"),
+                name="Other Admin",
+                role="admin",
+            )
+        )
+        await db.commit()
+
+    login = await client.post(
+        "/api/v1/auth/tenant/login",
+        json={"email": "admin@other.co", "password": "admin123"},
+    )
+    assert login.status_code == 200
+
+    foreign = await client.get(
+        f"/api/v1/admin/payouts/{payout_id}",
+        headers={"Authorization": f"Bearer {login.json()['token']}"},
+    )
+    # Same 404 as an unknown ID: cross-tenant existence is never revealed.
+    assert foreign.status_code == 404
