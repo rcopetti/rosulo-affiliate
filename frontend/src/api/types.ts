@@ -122,6 +122,7 @@ export interface Commission {
   currency: string;
   status: 'pending' | 'available' | 'reserved' | 'paid' | 'reversed';
   available_at?: string | null;
+  created_at: string;
 }
 
 export interface PayoutPaymentConfirmation {

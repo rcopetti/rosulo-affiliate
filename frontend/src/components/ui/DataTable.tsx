@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { ReactNode } from 'react';
 import { EmptyState } from './EmptyState';
+import { Pagination } from './Pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './Table';
 import { TableSkeleton } from './Skeleton';
 
@@ -22,6 +23,8 @@ interface DataTableProps<T> {
   emptyTitle: string;
   emptyDescription?: string;
   initialSort?: { key: string; direction: 'asc' | 'desc' };
+  /** When set, the table paginates client-side after sorting. */
+  defaultPageSize?: number;
 }
 
 export function DataTable<T>({
@@ -32,8 +35,13 @@ export function DataTable<T>({
   emptyTitle,
   emptyDescription,
   initialSort,
+  defaultPageSize,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(initialSort ?? null);
+  const [skip, setSkip] = useState(0);
+  const [limit, setLimit] = useState(defaultPageSize ?? 20);
+
+  useEffect(() => setSkip(0), [data]);
 
   const sorted = useMemo(() => {
     if (!sort) return data;
@@ -67,7 +75,10 @@ export function DataTable<T>({
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
 
+  const rows = defaultPageSize ? sorted.slice(skip, skip + limit) : sorted;
+
   return (
+    <>
     <Table className="w-full table-fixed">
       <TableHead>
         <TableRow>
@@ -99,7 +110,7 @@ export function DataTable<T>({
         </TableRow>
       </TableHead>
       <TableBody>
-        {sorted.map((row) => (
+        {rows.map((row) => (
           <TableRow key={rowKey(row)}>
             {columns.map((col) => (
               <TableCell key={col.key} className={col.className}>
@@ -110,5 +121,18 @@ export function DataTable<T>({
         ))}
       </TableBody>
     </Table>
+    {defaultPageSize && (
+      <Pagination
+        skip={skip}
+        limit={limit}
+        total={sorted.length}
+        onSkipChange={setSkip}
+        onLimitChange={(l) => {
+          setLimit(l);
+          setSkip(0);
+        }}
+      />
+    )}
+    </>
   );
 }

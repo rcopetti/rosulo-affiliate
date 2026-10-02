@@ -86,6 +86,7 @@ const commission = (overrides: Partial<Commission>): Commission => ({
   currency: 'USD',
   status: 'available',
   available_at: '2026-10-01T00:00:00Z',
+  created_at: '2026-10-01T00:00:00Z',
   ...overrides,
 });
 

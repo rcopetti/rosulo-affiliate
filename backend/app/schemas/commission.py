@@ -15,3 +15,4 @@ class CommissionOut(BaseModel):
     currency: str
     status: str
     available_at: datetime | None = None
+    created_at: datetime
