@@ -44,6 +44,19 @@ async def _run_preflight():
         await conn.run_sync(MIGRATION.run_preflight)
 
 
+async def _drop_sale_context_constraint():
+    # ck_events_sale_payment_context only exists from a1b2c3d4e5f6 onward;
+    # these preflights emulate the earlier revision where invalid sale events
+    # could still be stored.
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.text(
+                "ALTER TABLE events "
+                "DROP CONSTRAINT ck_events_sale_payment_context"
+            )
+        )
+
+
 async def _create_sale_commission(
     session,
     *,
@@ -99,6 +112,7 @@ async def _create_payout(session, affiliate, tenant, status="pending_approval"):
 
 @pytest.mark.asyncio
 async def test_preflight_rejects_sale_event_missing_good_date():
+    await _drop_sale_context_constraint()
     async with async_session() as session:
         await _create_sale_commission(session, good_date=None)
         await session.commit()
@@ -112,6 +126,7 @@ async def test_preflight_rejects_sale_event_missing_good_date():
 async def test_preflight_rejects_sale_event_missing_payment_record_id(
     payment_record_id,
 ):
+    await _drop_sale_context_constraint()
     async with async_session() as session:
         await _create_sale_commission(session, payment_record_id=payment_record_id)
         await session.commit()

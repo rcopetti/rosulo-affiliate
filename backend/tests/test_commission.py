@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
@@ -15,7 +16,7 @@ from app.db.models import (
     Tenant,
     Term,
 )
-from app.db.session import async_session
+from app.db.session import async_session, engine
 from app.services.commission import calculate_from_sale_event
 
 
@@ -178,6 +179,15 @@ async def test_sale_without_good_date_creates_no_commission(tenant: Tenant):
     """A sale event ingested by an older app version can carry a NULL
     good_date. Retrying it after a contract exists must mark the event and
     skip commission creation instead of crashing in utc_midnight(None)."""
+    # ck_events_sale_payment_context now guards this at the schema level;
+    # drop it to emulate a row written by a pre-contract app version.
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.text(
+                "ALTER TABLE events "
+                "DROP CONSTRAINT ck_events_sale_payment_context"
+            )
+        )
     async with async_session() as db:
         account = AffiliateAccount(
             email="missing-good-date@example.com",
