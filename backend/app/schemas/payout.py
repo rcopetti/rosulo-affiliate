@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -21,15 +21,29 @@ class PayoutRequest(BaseModel):
 
 
 class PayoutPaymentConfirmation(BaseModel):
-    payment_method: str = Field(..., min_length=1, max_length=50)
+    # extra="forbid" keeps amount/currency/method server-derived: the client
+    # only reports when the PayPal transfer actually completed and under which
+    # reference.
+    model_config = ConfigDict(extra="forbid")
+
+    paid_at: datetime
     transfer_reference: str = Field(..., min_length=1, max_length=255)
 
-    @field_validator("payment_method", "transfer_reference")
+    @field_validator("paid_at")
     @classmethod
-    def strip_required_values(cls, value: str) -> str:
+    def validate_paid_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("paid_at must include a timezone offset")
+        if value > datetime.now(timezone.utc):
+            raise ValueError("paid_at must not be in the future")
+        return value
+
+    @field_validator("transfer_reference")
+    @classmethod
+    def strip_transfer_reference(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("Value must not be blank")
+            raise ValueError("transfer_reference must not be blank")
         return value
 
 
@@ -71,5 +85,5 @@ class PayoutOut(BaseModel):
     requested_at: datetime
     approved_at: datetime | None = None
     paid_at: datetime | None = None
-    payment_record: PayoutPaymentOut | None = None
+    payout_payment: PayoutPaymentOut | None = None
     transitions: list[PayoutTransitionOut] = Field(default_factory=list)

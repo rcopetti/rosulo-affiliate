@@ -11,9 +11,10 @@ from app.core.money import is_supported_currency, normalize_currency_code, quant
 from app.db.models import (
     Affiliate,
     Commission,
-    PaymentRecord,
     Payout,
     PayoutCommission,
+    PayoutNotification,
+    PayoutPayment,
     PayoutTransition,
     Tenant,
     TenantUser,
@@ -194,16 +195,29 @@ async def confirm_payout_payment(
     db: AsyncSession,
     payout: Payout,
     reviewer: TenantUser,
-    payment_method: str,
+    paid_at: datetime,
     transfer_reference: str,
 ) -> Payout:
+    """Record a merchant-confirmed PayPal transfer for an approved payout.
+
+    ``paid_at`` is the actual payment datetime the merchant entered (the
+    request schema guarantees a timezone offset and no future time). The
+    amount, currency, and ``paypal`` method are server-derived so a client
+    cannot restate what was paid. Payment, pending notification, commission
+    settlement, and the ``approved -> paid`` transition commit in a single
+    transaction; Task 6's sender picks up the notification after commit.
+    """
+    transfer_reference = transfer_reference.strip()
     payout = await _lock_payout(db, payout.id)
     _verify_reviewer(payout, reviewer)
     if payout.status == "paid":
-        existing = payout.payment_record
+        # Idempotent retry: only an exact replay of the recorded payment
+        # details returns the existing result; any divergence means the
+        # merchant is restating a completed payment and gets a conflict.
+        existing = payout.payout_payment
         if (
             existing
-            and existing.payment_method == payment_method
+            and existing.paid_at == paid_at
             and existing.transfer_reference == transfer_reference
         ):
             return payout
@@ -213,20 +227,19 @@ async def confirm_payout_payment(
 
     commissions = await _verify_linked_commissions(db, payout)
 
-    paid_at = datetime.now(timezone.utc)
-    payment_record = PaymentRecord(
-        tenant_id=payout.tenant_id,
-        amount=payout.net_paid,
-        currency=payout.currency,
-        paid_at=paid_at,
-        status="paid",
-        record_type="affiliate_payout",
-        payout_id=payout.id,
-        payment_method=payment_method,
-        transfer_reference=transfer_reference,
-        recorded_by_tenant_user_id=reviewer.id,
+    db.add(
+        PayoutPayment(
+            payout_id=payout.id,
+            amount=payout.net_paid,
+            currency=payout.currency,
+            payment_method="paypal",
+            transfer_reference=transfer_reference,
+            paid_at=paid_at,
+            recorded_by_tenant_user_id=reviewer.id,
+        )
     )
-    db.add(payment_record)
+    db.add(PayoutNotification(payout_id=payout.id, status="pending"))
+
     for link in payout.payout_commissions:
         link.is_active = False
     for commission in commissions:

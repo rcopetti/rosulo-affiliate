@@ -69,6 +69,6 @@ async def confirm_payout_payment(
         db,
         payout,
         reviewer,
-        data.payment_method,
+        data.paid_at,
         data.transfer_reference,
     )

@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -16,11 +16,13 @@ from app.db.models import (
     Event,
     Payout,
     PayoutCommission,
+    PayoutNotification,
+    PayoutPayment,
     Tenant,
 )
 from app.db.session import async_session
 from app.queue.handlers import handle_payout
-from app.schemas.payout import PayoutRequest
+from app.schemas.payout import PayoutPaymentConfirmation, PayoutRequest
 from app.services.commission import mature_due_commissions, utc_midnight
 from app.services.payout import request_payout
 
@@ -49,6 +51,55 @@ def test_payout_request_rejects_malformed_commission_ids():
 def test_payout_request_without_ids_requests_all_available():
     request = PayoutRequest(currency="USD")
     assert request.commission_ids is None
+
+
+PAID_AT_PAST = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+
+def test_payment_confirmation_requires_paid_at_and_reference():
+    with pytest.raises(ValidationError):
+        PayoutPaymentConfirmation(transfer_reference="tx-1")
+    with pytest.raises(ValidationError):
+        PayoutPaymentConfirmation(paid_at=PAID_AT_PAST.isoformat())
+
+
+def test_payment_confirmation_rejects_naive_paid_at():
+    with pytest.raises(ValidationError):
+        PayoutPaymentConfirmation(
+            paid_at="2026-09-01T10:00:00", transfer_reference="tx-1"
+        )
+
+
+def test_payment_confirmation_rejects_future_paid_at():
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    with pytest.raises(ValidationError):
+        PayoutPaymentConfirmation(paid_at=future, transfer_reference="tx-1")
+
+
+def test_payment_confirmation_requires_nonblank_reference():
+    with pytest.raises(ValidationError):
+        PayoutPaymentConfirmation(
+            paid_at=PAID_AT_PAST.isoformat(), transfer_reference="   "
+        )
+
+
+@pytest.mark.parametrize("field", ["amount", "currency", "payment_method"])
+def test_payment_confirmation_rejects_client_overrides(field):
+    """Amount/currency/method are server-derived; the client must not set them."""
+    with pytest.raises(ValidationError):
+        PayoutPaymentConfirmation(
+            paid_at=PAID_AT_PAST.isoformat(),
+            transfer_reference="tx-1",
+            **{field: "override"},
+        )
+
+
+def test_payment_confirmation_trims_reference_and_keeps_offset():
+    confirmation = PayoutPaymentConfirmation(
+        paid_at=PAID_AT_PAST.isoformat(), transfer_reference="  PP-TX-1  "
+    )
+    assert confirmation.transfer_reference == "PP-TX-1"
+    assert confirmation.paid_at == PAID_AT_PAST
 
 
 @pytest.mark.asyncio
@@ -218,7 +269,10 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
     premature_payment = await client.post(
         f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"payment_method": "bank_transfer", "transfer_reference": "bank-tx-123"},
+        json={
+            "paid_at": PAID_AT_PAST.isoformat(),
+            "transfer_reference": "bank-tx-123",
+        },
     )
     assert premature_payment.status_code == 400
 
@@ -264,7 +318,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
     assert by_currency["USD"]["status"] == "reserved"
 
     payment_details = {
-        "payment_method": "bank_transfer",
+        "paid_at": PAID_AT_PAST.isoformat(),
         "transfer_reference": "bank-tx-123",
     }
     confirmed = await client.post(
@@ -274,10 +328,15 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
     )
     assert confirmed.status_code == 200
     assert confirmed.json()["status"] == "paid"
-    assert confirmed.json()["payment_record"]["payment_method"] == "bank_transfer"
-    assert confirmed.json()["payment_record"]["transfer_reference"] == "bank-tx-123"
-    assert confirmed.json()["payment_record"]["amount"] == confirmed.json()["net_paid"]
-    assert confirmed.json()["payment_record"]["currency"] == confirmed.json()["currency"]
+    assert "payment_record" not in confirmed.json()
+    assert confirmed.json()["payout_payment"]["payment_method"] == "paypal"
+    assert confirmed.json()["payout_payment"]["transfer_reference"] == "bank-tx-123"
+    assert confirmed.json()["payout_payment"]["amount"] == confirmed.json()["net_paid"]
+    assert confirmed.json()["payout_payment"]["currency"] == confirmed.json()["currency"]
+    assert datetime.fromisoformat(
+        confirmed.json()["payout_payment"]["paid_at"]
+    ) == PAID_AT_PAST
+    assert datetime.fromisoformat(confirmed.json()["paid_at"]) == PAID_AT_PAST
     assert [item["to_status"] for item in confirmed.json()["transitions"]] == [
         "pending_approval",
         "approved",
@@ -291,12 +350,15 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
         json=payment_details,
     )
     assert duplicate_confirmation.status_code == 200
-    assert duplicate_confirmation.json()["payment_record"]["id"] == confirmed.json()["payment_record"]["id"]
+    assert duplicate_confirmation.json()["payout_payment"]["id"] == confirmed.json()["payout_payment"]["id"]
 
     conflicting_confirmation = await client.post(
         f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"payment_method": "bank_transfer", "transfer_reference": "different-ref"},
+        json={
+            "paid_at": PAID_AT_PAST.isoformat(),
+            "transfer_reference": "different-ref",
+        },
     )
     assert conflicting_confirmation.status_code == 409
 
@@ -776,7 +838,7 @@ async def test_confirm_payment_settles_backfilled_pending_reservation(
         f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
         headers=admin_headers,
         json={
-            "payment_method": "bank_transfer",
+            "paid_at": PAID_AT_PAST.isoformat(),
             "transfer_reference": "migrated-tx-1",
         },
     )
@@ -789,3 +851,245 @@ async def test_confirm_payment_settles_backfilled_pending_reservation(
             select(PayoutCommission).where(PayoutCommission.payout_id == payout_id)
         )
     assert link.is_active is False
+
+
+async def _approved_payout_id(
+    client: AsyncClient, payout_scenario, marker: str
+) -> str:
+    """Create one available commission, request a payout for it, and approve."""
+    commission_id = await payout_scenario.create_commission(
+        PAST_DUE, marker, status="available"
+    )
+    request = await _payout_request(
+        client,
+        payout_scenario,
+        {"currency": "USD", "commission_ids": [str(commission_id)]},
+    )
+    assert request.status_code == 200
+    payout_id = request.json()["id"]
+    approved = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/approve",
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+    )
+    assert approved.status_code == 200
+    return payout_id
+
+
+def _confirm_payload(**overrides) -> dict:
+    payload = {
+        "paid_at": PAID_AT_PAST.isoformat(),
+        "transfer_reference": "PP-TX-1",
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_confirm_payment_records_paypal_payment(
+    client: AsyncClient, payout_scenario
+):
+    payout_id = await _approved_payout_id(client, payout_scenario, "confirm-1")
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+
+    confirmed = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=_confirm_payload(transfer_reference="  PP-TX-100  "),
+    )
+
+    assert confirmed.status_code == 200
+    body = confirmed.json()
+    assert body["status"] == "paid"
+    assert "payment_record" not in body
+    payment = body["payout_payment"]
+    assert payment["payment_method"] == "paypal"
+    assert payment["amount"] == body["net_paid"] == 10.0
+    assert payment["currency"] == body["currency"] == "USD"
+    assert payment["transfer_reference"] == "PP-TX-100"
+    assert datetime.fromisoformat(payment["paid_at"]) == PAID_AT_PAST
+    assert datetime.fromisoformat(body["paid_at"]) == PAID_AT_PAST
+    assert payment["recorded_by_tenant_user_id"]
+    assert [item["to_status"] for item in body["transitions"]][-2:] == [
+        "approved",
+        "paid",
+    ]
+
+    # The payment row and its pending notification commit atomically.
+    async with payout_scenario.db_session() as db:
+        payment_row = await db.scalar(
+            select(PayoutPayment).where(
+                PayoutPayment.payout_id == uuid.UUID(payout_id)
+            )
+        )
+        notification = await db.scalar(
+            select(PayoutNotification).where(
+                PayoutNotification.payout_id == uuid.UUID(payout_id)
+            )
+        )
+    assert payment_row.payment_method == "paypal"
+    assert payment_row.transfer_reference == "PP-TX-100"
+    assert payment_row.paid_at == PAID_AT_PAST
+    assert notification.status == "pending"
+    assert notification.attempt_count == 0
+
+
+@pytest.mark.asyncio
+async def test_confirm_payment_identical_retry_returns_existing(
+    client: AsyncClient, payout_scenario
+):
+    payout_id = await _approved_payout_id(client, payout_scenario, "confirm-retry-1")
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+    payload = _confirm_payload(transfer_reference="PP-TX-RETRY")
+
+    first = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=payload,
+    )
+    second = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=payload,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert (
+        second.json()["payout_payment"]["id"]
+        == first.json()["payout_payment"]["id"]
+    )
+
+    async with payout_scenario.db_session() as db:
+        payment_count = await db.scalar(
+            select(func.count(PayoutPayment.id)).where(
+                PayoutPayment.payout_id == uuid.UUID(payout_id)
+            )
+        )
+        notification_count = await db.scalar(
+            select(func.count(PayoutNotification.id)).where(
+                PayoutNotification.payout_id == uuid.UUID(payout_id)
+            )
+        )
+    assert payment_count == 1
+    assert notification_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "conflict",
+    [
+        {"transfer_reference": "different-ref"},
+        {"paid_at": (PAID_AT_PAST - timedelta(hours=1)).isoformat()},
+    ],
+)
+async def test_confirm_payment_conflicting_retry_returns_409(
+    client: AsyncClient, payout_scenario, conflict
+):
+    payout_id = await _approved_payout_id(client, payout_scenario, "confirm-409")
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+    payload = _confirm_payload()
+
+    first = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=payload,
+    )
+    assert first.status_code == 200
+
+    conflicting = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=_confirm_payload(**conflict),
+    )
+    assert conflicting.status_code == 409
+
+    # The 409 must not mutate the stored payment or payout state.
+    payout = await client.get(
+        f"/api/v1/admin/payouts/{payout_id}",
+        headers=admin_headers,
+    )
+    assert payout.json()["status"] == "paid"
+    assert (
+        payout.json()["payout_payment"]["id"]
+        == first.json()["payout_payment"]["id"]
+    )
+    assert payout.json()["payout_payment"]["transfer_reference"] == "PP-TX-1"
+    async with payout_scenario.db_session() as db:
+        payment_count = await db.scalar(
+            select(func.count(PayoutPayment.id)).where(
+                PayoutPayment.payout_id == uuid.UUID(payout_id)
+            )
+        )
+    assert payment_count == 1
+
+
+@pytest.mark.asyncio
+async def test_confirm_payment_requires_approved_status(
+    client: AsyncClient, payout_scenario
+):
+    commission_id = await payout_scenario.create_commission(
+        PAST_DUE, "confirm-status-1", status="available"
+    )
+    request = await _payout_request(
+        client,
+        payout_scenario,
+        {"currency": "USD", "commission_ids": [str(commission_id)]},
+    )
+    assert request.status_code == 200
+    payout_id = request.json()["id"]
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+
+    # A payout still awaiting approval cannot be confirmed.
+    pending = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=_confirm_payload(),
+    )
+    assert pending.status_code == 400
+    assert await payout_scenario.commission_status(commission_id) == "reserved"
+
+    rejected = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/reject",
+        headers=admin_headers,
+    )
+    assert rejected.status_code == 200
+
+    # A rejected payout cannot be confirmed either.
+    rejected_confirmation = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=_confirm_payload(),
+    )
+    assert rejected_confirmation.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_confirm_payment_endpoint_validates_payload(
+    client: AsyncClient, payout_scenario
+):
+    payout_id = await _approved_payout_id(client, payout_scenario, "confirm-422")
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+    url = f"/api/v1/admin/payouts/{payout_id}/confirm-payment"
+
+    bad_payloads = [
+        # naive paid_at: no timezone offset
+        _confirm_payload(paid_at="2026-01-01T10:00:00"),
+        # future paid_at
+        _confirm_payload(
+            paid_at=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        ),
+        # blank transfer reference
+        _confirm_payload(transfer_reference="   "),
+        # client-supplied overrides are forbidden
+        _confirm_payload(payment_method="bank_transfer"),
+        _confirm_payload(amount="1.00"),
+        _confirm_payload(currency="EUR"),
+    ]
+    for bad in bad_payloads:
+        response = await client.post(url, headers=admin_headers, json=bad)
+        assert response.status_code == 422, bad
+
+    # Validation failures leave the payout approved and unrecorded.
+    payout = await client.get(url.rsplit("/confirm-payment", 1)[0], headers=admin_headers)
+    assert payout.json()["status"] == "approved"
+    assert payout.json()["payout_payment"] is None
