@@ -105,10 +105,17 @@ async def get_current_affiliate(
     account = account_result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found")
+    try:
+        tenant_uuid = uuid.UUID(x_tenant_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Affiliate is not linked to this tenant",
+        )
     result = await db.execute(
         select(Affiliate).where(
             Affiliate.affiliate_account_id == account.id,
-            Affiliate.tenant_id == uuid.UUID(x_tenant_id),
+            Affiliate.tenant_id == tenant_uuid,
         )
     )
     affiliate = result.scalar_one_or_none()

@@ -9,6 +9,7 @@ interface PayoutDetailProps {
   /** Called with the payout id when the merchant retries a failed
    * notification email. Omit to hide the action entirely. */
   onRetryNotification?: (id: string) => void;
+  isRetryPending?: boolean;
 }
 
 const NOTIFICATION_LABELS: Record<string, string> = {
@@ -18,7 +19,7 @@ const NOTIFICATION_LABELS: Record<string, string> = {
   failed: 'Email failed',
 };
 
-export function PayoutDetail({ payout, onRetryNotification }: PayoutDetailProps) {
+export function PayoutDetail({ payout, onRetryNotification, isRetryPending }: PayoutDetailProps) {
   const lines = payout.payout_commissions ?? [];
   const commissionCount = payout.commission_count ?? lines.length;
   const grossTotal = lines.reduce((sum, line) => sum + line.gross_amount, 0);
@@ -133,6 +134,7 @@ export function PayoutDetail({ payout, onRetryNotification }: PayoutDetailProps)
               <Button
                 size="sm"
                 variant="secondary"
+                isLoading={isRetryPending}
                 onClick={() => onRetryNotification(payout.id)}
               >
                 Retry email

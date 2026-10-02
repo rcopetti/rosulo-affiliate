@@ -50,9 +50,17 @@ def _deliverable(now: datetime):
     )
 
 
-async def _claim_notification(db: AsyncSession, payout_id: uuid.UUID) -> bool:
-    """Atomically claim the payout's notification for delivery."""
+async def _claim_notification(
+    db: AsyncSession, payout_id: uuid.UUID
+) -> datetime | None:
+    """Atomically claim the payout's notification for delivery.
+
+    Returns the lease expiry written by this claim, or ``None`` when another
+    worker holds the row. The lease value fences the outcome write so a
+    stalled claim owner cannot overwrite a newer attempt's terminal state.
+    """
     now = datetime.now(timezone.utc)
+    lease_expires_at = now + NOTIFICATION_LEASE
     result = await db.execute(
         update(PayoutNotification)
         .where(
@@ -63,14 +71,14 @@ async def _claim_notification(db: AsyncSession, payout_id: uuid.UUID) -> bool:
             status="sending",
             attempt_count=PayoutNotification.attempt_count + 1,
             last_attempt_at=now,
-            lease_expires_at=now + NOTIFICATION_LEASE,
+            lease_expires_at=lease_expires_at,
             updated_at=now,
         )
     )
     # Commit BEFORE the provider call: a crash mid-send must leave a
     # visible, expirable lease rather than a row that looks untouched.
     await db.commit()
-    return result.rowcount == 1
+    return lease_expires_at if result.rowcount == 1 else None
 
 
 async def deliver_payout_notification(
@@ -83,7 +91,8 @@ async def deliver_payout_notification(
     terminal state. Send failures only touch the notification row — payout
     and payment state are never reverted.
     """
-    if not await _claim_notification(db, payout_id):
+    claim_lease = await _claim_notification(db, payout_id)
+    if claim_lease is None:
         return None
 
     result = await db.execute(
@@ -110,9 +119,13 @@ async def deliver_payout_notification(
         logger.exception(
             "payout notification send failed payout_id=%s", payout_id
         )
-        await db.execute(
+        outcome = await db.execute(
             update(PayoutNotification)
-            .where(PayoutNotification.payout_id == payout_id)
+            .where(
+                PayoutNotification.payout_id == payout_id,
+                PayoutNotification.status == "sending",
+                PayoutNotification.lease_expires_at == claim_lease,
+            )
             .values(
                 status="failed",
                 last_error=f"{type(exc).__name__}: {exc}"[:MAX_ERROR_LENGTH],
@@ -121,11 +134,20 @@ async def deliver_payout_notification(
             )
         )
         await db.commit()
+        if outcome.rowcount != 1:
+            logger.info(
+                "payout notification outcome superseded payout_id=%s", payout_id
+            )
+            return None
         return "failed"
 
-    await db.execute(
+    outcome = await db.execute(
         update(PayoutNotification)
-        .where(PayoutNotification.payout_id == payout_id)
+        .where(
+            PayoutNotification.payout_id == payout_id,
+            PayoutNotification.status == "sending",
+            PayoutNotification.lease_expires_at == claim_lease,
+        )
         .values(
             status="sent",
             sent_at=now,
@@ -135,6 +157,11 @@ async def deliver_payout_notification(
         )
     )
     await db.commit()
+    if outcome.rowcount != 1:
+        logger.info(
+            "payout notification outcome superseded payout_id=%s", payout_id
+        )
+        return None
     return "sent"
 
 
@@ -173,9 +200,18 @@ async def process_due_notifications(
         .limit(limit)
     )
     payout_ids = list(result.scalars().all())
-    summary = {"claimed": 0, "sent": 0, "failed": 0}
+    summary = {"claimed": 0, "sent": 0, "failed": 0, "errors": 0}
     for payout_id in payout_ids:
-        outcome = await deliver_payout_notification(db, payout_id)
+        try:
+            outcome = await deliver_payout_notification(db, payout_id)
+        except Exception:
+            # One bad row must not abort the batch; its claim lease expires
+            # and the next run retries it.
+            logger.exception(
+                "payout notification delivery crashed payout_id=%s", payout_id
+            )
+            summary["errors"] += 1
+            continue
         if outcome is None:
             continue
         summary["claimed"] += 1

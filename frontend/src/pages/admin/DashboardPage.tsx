@@ -130,6 +130,7 @@ export function AdminDashboardPage() {
             onReject={(id) => reject.mutate(id)}
             onConfirmPayment={(id, details) => confirm.mutate({ id, details })}
             onRetryNotification={(id) => retryNotification.mutate(id)}
+            isRetryPending={retryNotification.isPending}
           />
         </Card>
       </div>

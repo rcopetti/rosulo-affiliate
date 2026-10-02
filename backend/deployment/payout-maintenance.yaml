@@ -32,8 +32,10 @@ Parameters:
     Type: String
     Description: >-
       ARN of the IAM role the task's containers run as (application
-      permissions). PassRole is scoped to this ARN.
-    AllowedPattern: "^arn:aws[a-zA-Z-]*:iam::\\d{12}:role/.+$"
+      permissions). PassRole is scoped to this ARN. The role name is
+      extracted from the ARN for policy attachment, so the ARN must use an
+      unpathed role name (arn:aws:iam::<account>:role/<name>).
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:iam::\\d{12}:role/[^/]+$"
   ExecutionRoleArn:
     Type: String
     Description: >-
@@ -153,6 +155,9 @@ Resources:
             Effect: Allow
             Action: ses:SendEmail
             Resource: !Ref SesIdentityArn
+            Condition:
+              StringEquals:
+                ses:FromAddress: !Ref EmailFrom
 
   # ------------------------------------------------------------------
   # SQS dead-letter queue for failed schedule deliveries.
