@@ -2,20 +2,24 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { PencilLine } from 'lucide-react';
-import { getAffiliate, reviewAffiliateDocument, viewAffiliateDocument } from '@/api/admin/affiliates';
+import { getAffiliate, getAffiliatePayouts, reviewAffiliateDocument, viewAffiliateDocument } from '@/api/admin/affiliates';
 import { getContract } from '@/api/admin/contracts';
 import { Button } from '@/components/ui/Button';
 import { PdfViewer } from '@/components/ui/PdfViewer';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { KycStatusBadge } from '@/components/shared/KycStatusBadge';
+import { PayoutStatusBadge } from '@/components/shared/PayoutStatusBadge';
 import { useToast } from '@/components/ui/Toast';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
+
+const PAYOUT_PAGE_SIZE = 20;
 
 export function AffiliateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [payoutOffset, setPayoutOffset] = useState(0);
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewType, setDocumentPreviewType] = useState<string | null>(null);
   const [documentPreviewContentType, setDocumentPreviewContentType] = useState<string | null>(null);
@@ -32,6 +36,12 @@ export function AffiliateDetailPage() {
   const { data: contract, isLoading: contractLoading } = useQuery({
     queryKey: ['admin-contract', id],
     queryFn: () => getContract(id!),
+    enabled: !!id,
+    retry: false,
+  });
+  const { data: payoutHistory } = useQuery({
+    queryKey: ['admin-affiliate-payouts', id, payoutOffset],
+    queryFn: () => getAffiliatePayouts(id!, { limit: PAYOUT_PAGE_SIZE, offset: payoutOffset }),
     enabled: !!id,
     retry: false,
   });
@@ -104,6 +114,89 @@ export function AffiliateDetailPage() {
             </div>
           ))}
         </dl>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payout history</CardTitle>
+        </CardHeader>
+        {payoutHistory === undefined ? (
+          <p className="text-sm text-fg-muted">Loading payouts…</p>
+        ) : (
+          <>
+            {payoutHistory.paid_totals_by_currency.length > 0 && (
+              <table className="mb-4 w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-fg-muted">
+                    <th scope="col" className="py-2 pr-4 font-semibold">Currency</th>
+                    <th scope="col" className="py-2 pr-4 font-semibold">Paid last 12 months</th>
+                    <th scope="col" className="py-2 font-semibold">Paid year to date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {payoutHistory.paid_totals_by_currency.map((row) => (
+                    <tr key={row.currency}>
+                      <td className="py-2.5 pr-4 font-medium text-fg">{row.currency}</td>
+                      <td className="py-2.5 pr-4 tabular-nums">{formatCurrency(row.rolling_12_months, row.currency)}</td>
+                      <td className="py-2.5 tabular-nums">{formatCurrency(row.year_to_date, row.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {payoutHistory.items.length === 0 ? (
+              <p className="text-sm text-fg-muted">No payouts yet.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-fg-muted">
+                    <th scope="col" className="py-2 pr-4 font-semibold">Requested</th>
+                    <th scope="col" className="py-2 pr-4 font-semibold">Paid</th>
+                    <th scope="col" className="py-2 pr-4 font-semibold">Status</th>
+                    <th scope="col" className="py-2 pr-4 font-semibold">Gross</th>
+                    <th scope="col" className="py-2 pr-4 font-semibold">Net</th>
+                    <th scope="col" className="py-2 font-semibold">Reference</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {payoutHistory.items.map((payout) => (
+                    <tr key={payout.id}>
+                      <td className="py-2.5 pr-4 text-fg-muted">{formatDateTime(payout.requested_at)}</td>
+                      <td className="py-2.5 pr-4 text-fg-muted">{payout.paid_at ? formatDateTime(payout.paid_at) : '—'}</td>
+                      <td className="py-2.5 pr-4"><PayoutStatusBadge status={payout.status} /></td>
+                      <td className="py-2.5 pr-4 tabular-nums">{formatCurrency(payout.requested_amount, payout.currency)}</td>
+                      <td className="py-2.5 pr-4 tabular-nums">{formatCurrency(payout.net_paid, payout.currency)}</td>
+                      <td className="py-2.5 font-mono text-xs text-fg-muted">{payout.payment_reference || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {payoutHistory.total > PAYOUT_PAGE_SIZE && (
+              <div className="mt-4 flex items-center justify-between">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={payoutOffset === 0}
+                  onClick={() => setPayoutOffset(Math.max(0, payoutOffset - PAYOUT_PAGE_SIZE))}
+                >
+                  Previous
+                </Button>
+                <span className="text-xs text-fg-muted">
+                  {payoutOffset + 1}–{Math.min(payoutOffset + PAYOUT_PAGE_SIZE, payoutHistory.total)} of {payoutHistory.total}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={payoutOffset + PAYOUT_PAGE_SIZE >= payoutHistory.total}
+                  onClick={() => setPayoutOffset(payoutOffset + PAYOUT_PAGE_SIZE)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </Card>
 
       <Card>

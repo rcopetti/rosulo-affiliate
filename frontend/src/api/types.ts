@@ -206,6 +206,37 @@ export interface PayoutRequestPayload {
   commission_ids?: string[];
 }
 
+// Row of an affiliate's payout history served by
+// GET /admin/affiliates/{id}/payouts.
+export interface AffiliatePayoutHistoryItem {
+  id: string;
+  status: PayoutStatus;
+  currency: string;
+  requested_amount: number;
+  approved_amount: number;
+  withholding_total: number;
+  net_paid: number;
+  requested_at: string;
+  approved_at?: string | null;
+  paid_at?: string | null;
+  payment_reference?: string | null;
+}
+
+// Paid payout totals for a single currency; never summed across currencies.
+export interface AffiliatePaidCurrencyTotals {
+  currency: string;
+  rolling_12_months: number;
+  year_to_date: number;
+}
+
+export interface AffiliatePayoutHistory {
+  items: AffiliatePayoutHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  paid_totals_by_currency: AffiliatePaidCurrencyTotals[];
+}
+
 export interface CurrencyBalance {
   currency: string;
   earned: number;

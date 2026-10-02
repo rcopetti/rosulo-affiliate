@@ -397,3 +397,86 @@ async def list_payouts(db: AsyncSession, tenant: Tenant):
         .options(*payout_detail_options())
     )
     return result.scalars().all()
+
+
+def _rolling_year_start(now: datetime) -> datetime:
+    """The same UTC date one year before ``now``.
+
+    Replacing the year fails on February 29 when the prior year is not a
+    leap year; the convention then is February 28.
+    """
+    try:
+        return now.replace(year=now.year - 1)
+    except ValueError:
+        return now.replace(year=now.year - 1, day=28)
+
+
+async def list_affiliate_payout_history(
+    db: AsyncSession,
+    affiliate_id: uuid.UUID,
+    tenant: Tenant,
+    limit: int,
+    offset: int,
+) -> tuple[list[Payout], int, list[dict]]:
+    """Newest-first payout rows for one affiliate plus paid totals.
+
+    ``paid_totals_by_currency`` aggregates ``PayoutPayment`` rows — the
+    recorded payment fact — grouped by currency. Rows are keyed by the
+    payout's affiliate and tenant so a same-tenant sibling or another
+    tenant's affiliate can never contribute, and amounts never mix
+    currencies.
+    """
+    filters = [
+        Payout.affiliate_id == affiliate_id,
+        Payout.tenant_id == tenant.id,
+    ]
+    total = (
+        await db.execute(
+            select(func.count()).select_from(Payout).where(*filters)
+        )
+    ).scalar() or 0
+
+    result = await db.execute(
+        select(Payout)
+        .where(*filters)
+        .options(selectinload(Payout.payout_payment))
+        .order_by(Payout.requested_at.desc(), Payout.id)
+        .offset(offset)
+        .limit(limit)
+    )
+    items = list(result.scalars().all())
+
+    now = datetime.now(timezone.utc)
+    rolling_start = _rolling_year_start(now)
+    year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    aggregates = await db.execute(
+        select(
+            PayoutPayment.currency,
+            func.coalesce(
+                func.sum(PayoutPayment.amount).filter(
+                    PayoutPayment.paid_at >= rolling_start
+                ),
+                0,
+            ).label("rolling_12_months"),
+            func.coalesce(
+                func.sum(PayoutPayment.amount).filter(
+                    PayoutPayment.paid_at >= year_start
+                ),
+                0,
+            ).label("year_to_date"),
+        )
+        .join(Payout, Payout.id == PayoutPayment.payout_id)
+        .where(Payout.affiliate_id == affiliate_id, Payout.tenant_id == tenant.id)
+        .group_by(PayoutPayment.currency)
+        .order_by(PayoutPayment.currency)
+    )
+    paid_totals = [
+        {
+            "currency": row.currency,
+            "rolling_12_months": float(row.rolling_12_months),
+            "year_to_date": float(row.year_to_date),
+        }
+        for row in aggregates.all()
+    ]
+    return items, total, paid_totals

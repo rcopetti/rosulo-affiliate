@@ -1,7 +1,9 @@
 import datetime
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasPath, BaseModel, ConfigDict, Field
+
+from app.schemas.payout import PayoutStatus
 
 
 class AffiliateCreate(BaseModel):
@@ -63,3 +65,47 @@ class AffiliateOut(BaseModel):
     tax_form_type: str | None = None
     documents: list[AffiliateDocumentOut] = []
     payout_eligibility: PayoutEligibilityOut
+
+
+class AffiliatePayoutHistoryItem(BaseModel):
+    """One payout row in an affiliate's history; the payment reference is
+    resolved from the recorded ``PayoutPayment`` when the payout is paid."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    status: PayoutStatus
+    currency: str
+    requested_amount: float
+    approved_amount: float
+    withholding_total: float
+    net_paid: float
+    requested_at: datetime.datetime
+    approved_at: datetime.datetime | None = None
+    paid_at: datetime.datetime | None = None
+    payment_reference: str | None = Field(
+        default=None,
+        validation_alias=AliasPath("payout_payment", "transfer_reference"),
+    )
+
+
+class AffiliatePaidCurrencyTotals(BaseModel):
+    """Paid ``PayoutPayment`` totals for one currency.
+
+    ``rolling_12_months`` covers ``paid_at >=`` the same UTC date one year
+    ago (Feb 28 when the prior year has no Feb 29); ``year_to_date`` covers
+    ``paid_at >=`` UTC Jan 1 of the current year. Currencies are never
+    summed together.
+    """
+
+    currency: str
+    rolling_12_months: float
+    year_to_date: float
+
+
+class AffiliatePayoutHistory(BaseModel):
+    items: list[AffiliatePayoutHistoryItem]
+    total: int
+    limit: int
+    offset: int
+    paid_totals_by_currency: list[AffiliatePaidCurrencyTotals]

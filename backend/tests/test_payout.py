@@ -1267,3 +1267,293 @@ async def test_payout_detail_hides_other_tenants_payout(
     )
     # Same 404 as an unknown ID: cross-tenant existence is never revealed.
     assert foreign.status_code == 404
+
+
+def _rolling_year_start(now: datetime) -> datetime:
+    """One year before ``now``: same date last year, or Feb 28 when the
+    prior year has no Feb 29."""
+    try:
+        return now.replace(year=now.year - 1)
+    except ValueError:
+        return now.replace(year=now.year - 1, day=28)
+
+
+async def _seed_payout(
+    payout_scenario,
+    *,
+    status="pending_approval",
+    currency="USD",
+    amount=Decimal("10.00"),
+    requested_at=None,
+    paid_at=None,
+    reference="PP-REF",
+    affiliate_id=None,
+    tenant_id=None,
+) -> uuid.UUID:
+    """Insert a payout (plus its PayoutPayment when ``paid_at`` is given)
+    directly, so tests can pin payment dates across aggregation windows
+    that the confirm endpoint's not-in-the-future rule cannot express."""
+    async with payout_scenario.db_session() as db:
+        reviewer_id = await db.scalar(
+            select(TenantUser.id).where(
+                TenantUser.tenant_id == payout_scenario.tenant_id
+            )
+        )
+        payout = Payout(
+            affiliate_id=affiliate_id or payout_scenario.affiliate_id,
+            tenant_id=tenant_id or payout_scenario.tenant_id,
+            requested_amount=amount,
+            approved_amount=amount,
+            net_paid=amount,
+            currency=currency,
+            status=status,
+            requested_at=requested_at or datetime.now(timezone.utc),
+            paid_at=paid_at,
+        )
+        db.add(payout)
+        await db.flush()
+        if paid_at is not None:
+            db.add(
+                PayoutPayment(
+                    payout_id=payout.id,
+                    amount=amount,
+                    currency=currency,
+                    payment_method="paypal",
+                    transfer_reference=reference,
+                    paid_at=paid_at,
+                    recorded_by_tenant_user_id=reviewer_id,
+                )
+            )
+        await db.commit()
+        return payout.id
+
+
+def _affiliate_payouts_url(affiliate_id) -> str:
+    return f"/api/v1/admin/affiliates/{affiliate_id}/payouts"
+
+
+@pytest.mark.asyncio
+async def test_affiliate_payout_history_paid_totals_by_currency(
+    client: AsyncClient, payout_scenario
+):
+    now = datetime.now(timezone.utc)
+    rolling_start = _rolling_year_start(now)
+    ytd_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    requested_base = now - timedelta(days=5)
+    # USD payments spanning every aggregation window.
+    await _seed_payout(
+        payout_scenario,
+        status="paid",
+        amount=Decimal("10.00"),
+        requested_at=requested_base,
+        paid_at=now - timedelta(hours=1),
+        reference="pp-usd-recent",
+    )
+    # Dec 31 of last year: inside the rolling 12 months (it is never
+    # earlier than now-minus-one-year) but outside the current year.
+    await _seed_payout(
+        payout_scenario,
+        status="paid",
+        amount=Decimal("20.00"),
+        requested_at=requested_base + timedelta(hours=1),
+        paid_at=ytd_start - timedelta(days=1),
+        reference="pp-usd-prior-year",
+    )
+    # Older than one year ago: excluded from both windows.
+    await _seed_payout(
+        payout_scenario,
+        status="paid",
+        amount=Decimal("40.00"),
+        requested_at=requested_base + timedelta(hours=2),
+        paid_at=rolling_start - timedelta(days=1),
+        reference="pp-usd-old",
+    )
+    # A second currency must never be summed into USD.
+    await _seed_payout(
+        payout_scenario,
+        status="paid",
+        currency="EUR",
+        amount=Decimal("7.50"),
+        requested_at=requested_base + timedelta(hours=3),
+        paid_at=now - timedelta(hours=2),
+        reference="pp-eur-recent",
+    )
+    # Unpaid payouts appear in the history but never add to paid totals.
+    for index, status in enumerate(("pending_approval", "approved", "rejected")):
+        await _seed_payout(
+            payout_scenario,
+            status=status,
+            requested_at=requested_base + timedelta(hours=4 + index),
+        )
+
+    response = await client.get(
+        _affiliate_payouts_url(payout_scenario.affiliate_id),
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+        params={"limit": 20, "offset": 0},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 7
+    assert body["limit"] == 20
+    assert body["offset"] == 0
+    assert len(body["items"]) == 7
+
+    totals = {row["currency"]: row for row in body["paid_totals_by_currency"]}
+    assert set(totals) == {"USD", "EUR"}
+    assert totals["USD"]["rolling_12_months"] == 30.0
+    assert totals["USD"]["year_to_date"] == 10.0
+    assert totals["EUR"]["rolling_12_months"] == 7.5
+    assert totals["EUR"]["year_to_date"] == 7.5
+
+    by_reference = {
+        item.get("payment_reference"): item for item in body["items"]
+    }
+    paid_item = by_reference["pp-usd-recent"]
+    assert paid_item["status"] == "paid"
+    assert paid_item["requested_amount"] == 10.0
+    assert paid_item["net_paid"] == 10.0
+    assert paid_item["currency"] == "USD"
+    assert datetime.fromisoformat(paid_item["paid_at"]) == now - timedelta(
+        hours=1
+    )
+    unpaid_items = [item for item in body["items"] if item["status"] != "paid"]
+    assert {item["status"] for item in unpaid_items} == {
+        "pending_approval",
+        "approved",
+        "rejected",
+    }
+    assert all(item["payment_reference"] is None for item in unpaid_items)
+
+
+@pytest.mark.asyncio
+async def test_affiliate_payout_history_paginates_newest_first(
+    client: AsyncClient, payout_scenario
+):
+    base = datetime.now(timezone.utc) - timedelta(days=30)
+    ids = []
+    for index in range(3):
+        ids.append(
+            await _seed_payout(
+                payout_scenario,
+                status="paid",
+                requested_at=base + timedelta(hours=index),
+                paid_at=base + timedelta(hours=index),
+                reference=f"pp-page-{index}",
+            )
+        )
+
+    admin = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+    url = _affiliate_payouts_url(payout_scenario.affiliate_id)
+
+    first_page = await client.get(
+        url, headers=admin, params={"limit": 2, "offset": 0}
+    )
+    assert first_page.status_code == 200
+    body = first_page.json()
+    assert body["total"] == 3
+    assert body["limit"] == 2
+    assert body["offset"] == 0
+    assert [item["id"] for item in body["items"]] == [str(ids[2]), str(ids[1])]
+    assert body["items"][0]["payment_reference"] == "pp-page-2"
+
+    second_page = await client.get(
+        url, headers=admin, params={"limit": 2, "offset": 2}
+    )
+    assert second_page.status_code == 200
+    assert [item["id"] for item in second_page.json()["items"]] == [str(ids[0])]
+
+    # Pagination bounds are validated: limit caps at 100, offset >= 0.
+    for params in ({"limit": 101}, {"limit": 0}, {"offset": -1}):
+        invalid = await client.get(url, headers=admin, params=params)
+        assert invalid.status_code == 422, params
+
+
+@pytest.mark.asyncio
+async def test_affiliate_payout_history_scoped_to_tenant_and_affiliate(
+    client: AsyncClient, payout_scenario
+):
+    admin = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+    now = datetime.now(timezone.utc)
+
+    async with payout_scenario.db_session() as db:
+        other_tenant = Tenant(
+            name="other-co", api_key_hash=hash_api_key("other-key")
+        )
+        db.add(other_tenant)
+        await db.flush()
+        other_account = AffiliateAccount(
+            email="foreign-affiliate@example.com",
+            password_hash="unused",
+            name="Foreign Affiliate",
+            country="US",
+            tax_status="us_person",
+        )
+        db.add(other_account)
+        await db.flush()
+        other_affiliate = Affiliate(
+            affiliate_account_id=other_account.id,
+            tenant_id=other_tenant.id,
+        )
+        db.add(other_affiliate)
+        sibling_account = AffiliateAccount(
+            email="sibling-affiliate@example.com",
+            password_hash="unused",
+            name="Sibling Affiliate",
+            country="US",
+            tax_status="us_person",
+        )
+        db.add(sibling_account)
+        await db.flush()
+        sibling_affiliate = Affiliate(
+            affiliate_account_id=sibling_account.id,
+            tenant_id=payout_scenario.tenant_id,
+        )
+        db.add(sibling_affiliate)
+        await db.commit()
+        other_affiliate_id = other_affiliate.id
+        sibling_affiliate_id = sibling_affiliate.id
+
+    # Paid payouts belonging to a same-tenant sibling and to another
+    # tenant's affiliate must not leak into this affiliate's history.
+    await _seed_payout(
+        payout_scenario,
+        status="paid",
+        amount=Decimal("99.00"),
+        paid_at=now - timedelta(hours=1),
+        reference="pp-sibling",
+        affiliate_id=sibling_affiliate_id,
+    )
+    await _seed_payout(
+        payout_scenario,
+        status="paid",
+        amount=Decimal("55.00"),
+        paid_at=now - timedelta(hours=1),
+        reference="pp-foreign",
+        affiliate_id=other_affiliate_id,
+        tenant_id=other_tenant.id,
+    )
+    own = await _seed_payout(
+        payout_scenario,
+        status="paid",
+        paid_at=now - timedelta(hours=1),
+        reference="pp-own",
+    )
+
+    response = await client.get(
+        _affiliate_payouts_url(payout_scenario.affiliate_id),
+        headers=admin,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert [item["id"] for item in body["items"]] == [str(own)]
+    totals = {row["currency"]: row for row in body["paid_totals_by_currency"]}
+    assert totals["USD"]["rolling_12_months"] == 10.0
+    assert totals["USD"]["year_to_date"] == 10.0
+
+    # Missing, malformed, and cross-tenant affiliate IDs all return 404.
+    for target in (uuid.uuid4(), other_affiliate_id, "not-a-uuid"):
+        hidden = await client.get(_affiliate_payouts_url(target), headers=admin)
+        assert hidden.status_code == 404, target
