@@ -3,7 +3,7 @@
 **Version**: 1.0
 **Date**: 2026-10-01
 **Author**: Workflow design
-**Status**: Review
+**Status**: Implemented
 **Implements**: Commission-backed manual payout product design
 
 ## Overview
@@ -155,7 +155,7 @@ paid -> terminal; corrections require a separately designed audited workflow
 
 ### Merchant UI -> Payout API (payment confirmation)
 
-- **Endpoint**: Proposed `POST /api/v1/admin/payouts/{id}/confirm-payment`.
+- **Endpoint**: `POST /api/v1/admin/payouts/{id}/confirm-payment`.
 - **Payload**: `paid_at` (timezone-aware datetime) and `transfer_reference` (required PayPal transaction/reference); method is fixed to PayPal, amount/currency come from payout.
 - **Success**: Payout with `paid` state and one `PayoutPayment`.
 - **Failure**: 400/422 validation, 403 tenant mismatch, 404 hidden cross-tenant resource, 409 invalid transition/inconsistent reservation/conflicting retry, retryable 5xx on database failure.
@@ -228,3 +228,4 @@ No external payment resource is created by Rosulo. Payment is performed by the m
 | Date | Finding | Action taken |
 |---|---|---|
 | 2026-10-01 | Initial target settlement flow is manual merchant PayPal, not provider execution; existing model conflates incoming payments and payouts. | Documented as Review; implementation remains pending. |
+| 2026-10-02 | Implemented by `2026-10-01-merchant-manual-payout-operations-implementation-plan.md` on `feature/merchant-manual-payout-operations`; `payment_records` storage retired by contract migration `a1b2c3d4e5f6` (fails closed on unresolved `incoming_payment` rows). | Backend 176 tests pass, frontend 42 tests pass, build green; expand/contract rollout order applies at deploy time. |

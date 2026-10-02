@@ -10,9 +10,9 @@ This registry maps the three payout-domain workflows specified for the next impl
 
 | Workflow | Spec file | Status | Trigger | Primary actor | Last reviewed |
 |---|---|---|---|---|---|
-| Commission maturity | `WORKFLOW-commission-maturity.md` | Review | Sale event with merchant `good_date` and external `payment_record_id`; EventBridge ECS/Fargate run at 00:15 UTC daily | Merchant integration / scheduled service | 2026-10-01; code divergence recorded |
-| Affiliate payout request | `WORKFLOW-affiliate-payout-request.md` | Review | Affiliate submits all or selected available commissions | Affiliate | 2026-10-01; selection gap recorded |
-| Merchant payout review and manual settlement | `WORKFLOW-merchant-payout-settlement.md` | Review | Merchant reviews request and later records external PayPal payment | Merchant user | 2026-10-01; payment-record/notification gaps recorded |
+| Commission maturity | `WORKFLOW-commission-maturity.md` | Implemented | Sale event with merchant `good_date` and external `payment_record_id`; EventBridge ECS/Fargate run at 00:15 UTC daily | Merchant integration / scheduled service | 2026-10-02; implementation verified |
+| Affiliate payout request | `WORKFLOW-affiliate-payout-request.md` | Implemented | Affiliate submits all or selected available commissions | Affiliate | 2026-10-02; selection implemented |
+| Merchant payout review and manual settlement | `WORKFLOW-merchant-payout-settlement.md` | Implemented | Merchant reviews request and later records external PayPal payment | Merchant user | 2026-10-02; `PayoutPayment` and notification outbox implemented |
 | Refund and commission reversal | Not yet specified | Missing | Future refund event references a prior sale's external `payment_record_id` | Merchant integration | — |
 
 ## Components
@@ -26,7 +26,7 @@ This registry maps the three payout-domain workflows specified for the next impl
 | Payout persistence and audit | `backend/app/db/models.py`, `backend/alembic/versions/` | Affiliate payout request, merchant payout review and manual settlement |
 | Payout UI | `frontend/src/pages/admin/PayoutsPage.tsx`, `frontend/src/components/admin/PayoutDetail.tsx`, `frontend/src/components/admin/PayoutQueue.tsx`, `frontend/src/components/affiliate/PayoutsTable.tsx` | Affiliate payout request, merchant payout review and manual settlement |
 | Payment email and notification state | `backend/app/services/email.py`, payout email templates, `PayoutNotification`, `backend/app/jobs/payout_maintenance.py` | Merchant payout review and manual settlement |
-| Incoming payment persistence | `backend/app/api/v1/public/webhooks.py`, `backend/app/services/payment_record.py`, `PaymentRecord` in `backend/app/db/models.py` | Current implementation only; planned retirement from sale/payout lifecycle |
+| Incoming payment persistence | Retired 2026-10-02: `backend/app/api/v1/public/webhooks.py` returns HTTP 410; `backend/app/services/payment_record.py` deleted; `payment_records` table and `PaymentRecord` model dropped by migration `a1b2c3d4e5f6` | Retired; fails closed if unresolved incoming rows exist |
 | Affiliate reporting | `backend/app/services/dashboard.py`, dashboard APIs and pages | Merchant payout review and manual settlement |
 
 ## User journeys
@@ -52,7 +52,7 @@ This registry maps the three payout-domain workflows specified for the next impl
 
 | Automatic action | Workflow(s) | Trigger |
 |---|---|---|
-| Promotes due pending commissions | Commission maturity | EventBridge Scheduler launches ECS/Fargate at 00:15 UTC daily (planned, not deployed) |
+| Promotes due pending commissions | Commission maturity | EventBridge Scheduler launches ECS/Fargate at 00:15 UTC daily via `backend/deployment/payout-maintenance.yaml` |
 | Sends affiliate paid notice | Merchant payout settlement | Payment transaction committed |
 | Associates future refund with source sale | Refund and commission reversal | Future refund event; workflow is Missing |
 
@@ -78,8 +78,8 @@ This registry maps the three payout-domain workflows specified for the next impl
 
 | Area scanned | Finding | Status |
 |---|---|---|
-| Payout/event API entry points | Sale event and affiliate/admin payout routes exist; incoming-payment webhook exists | Scanned for relevant routes |
-| Background jobs/scheduler | No current schedule found in repository; Workstream 0.6 specifies `backend/deployment/payout-maintenance.yaml` with EventBridge Scheduler and ECS/Fargate | Planned; deploy/verify before launch |
-| Database state/associations | `Commission`, `Payout`, `PayoutCommission`, `PayoutTransition`, and overloaded `PaymentRecord` exist | Relevant models inspected |
-| Notifications | Existing email sender/templates; payout notification outbox, retry, and merchant visibility specified in Workstream 0.6 | Planned; implementation pending |
-| Deployment scheduler capability | README and `backend/run-migration.sh` show an AWS ECS/Fargate job pattern; no schedule currently exists | Workstream 0.6 specifies EventBridge Scheduler/Fargate; verify stack inputs before deployment |
+| Payout/event API entry points | Sale event and affiliate/admin payout routes exist; incoming-payment and PayPal payout webhooks return HTTP 410 | Verified 2026-10-02 |
+| Background jobs/scheduler | `backend/app/jobs/payout_maintenance.py` with `backend/deployment/payout-maintenance.yaml` (EventBridge Scheduler + ECS/Fargate at 00:15 UTC, 10-minute timeout, DLQ) | Implemented; verify non-production run before launch |
+| Database state/associations | `Commission`, `Payout`, `PayoutCommission`, `PayoutTransition`, `PayoutPayment`, `PayoutNotification` exist; `PaymentRecord`/`payment_records` retired by `a1b2c3d4e5f6` | Verified 2026-10-02 |
+| Notifications | `PayoutNotification` outbox with leased claims, merchant retry, and daily recovery; SES delivery after commit | Implemented |
+| Deployment scheduler capability | README and `backend/run-migration.sh` show an AWS ECS/Fargate job pattern; `payout-maintenance.yaml` extends it with EventBridge Scheduler | Template validated; verify non-production run before launch |

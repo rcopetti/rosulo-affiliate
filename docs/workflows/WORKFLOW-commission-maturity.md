@@ -3,7 +3,7 @@
 **Version**: 1.0
 **Date**: 2026-10-01
 **Author**: Workflow design
-**Status**: Review
+**Status**: Implemented
 **Implements**: Commission-backed manual payout product design
 
 ## Overview
@@ -75,7 +75,7 @@ A merchant sends a sale event after customer payment is confirmed and supplies t
 ### STEP 3: Run daily maturity scan
 
 **Actor**: Daily scheduler and commission service
-**Action**: At least once each UTC day, select `pending` commissions where the stored/derived UTC due instant is `<= now_utc`, update them to `available`, and commit atomically. Exclude any commission linked to a payout in `pending_approval` or `approved`, even if a legacy App Runner instance left its stored status as `pending` or `PayoutCommission.is_active=false`. When `available_at` is null on a legacy-created row, derive it from the source sale's `good_date` and mirror `available_on=good_date` until the final contract migration. Do not alter `reserved`, `paid`, or `reversed` states.
+**Action**: At least once each UTC day, select `pending` commissions where the stored/derived UTC due instant is `<= now_utc`, update them to `available`, and commit atomically. Exclude any commission linked to a payout in `pending_approval` or `approved`, even if a legacy App Runner instance left its stored status as `pending` or `PayoutCommission.is_active=false`. When `available_at` is null on a legacy-created row, derive it from the source sale's `good_date`. The transitional `available_on` column was dropped by contract migration `a1b2c3d4e5f6`. Do not alter `reserved`, `paid`, or `reversed` states.
 **Timeout**: 10 minutes for the one-shot job. The job cancels the active database transaction on timeout, exits non-zero, and relies on the next daily run to catch up.
 **Input**: Scheduled run ID and UTC start timestamp.
 **Output on SUCCESS**: Number of examined/promoted rows and completion timestamp -> END.
@@ -134,9 +134,9 @@ The workflow creates no external resources. Database writes are transactional. I
 
 | # | Finding | Severity | Resolution |
 |---|---|---|---|
-| R-1 | Current `EventCreate.good_date` is optional, and commission code currently computes `available_on = (good_date or today) + 14 days`. | High | Product spec makes good_date required for sale events and the merchant-supplied due date itself; implement in follow-up plan. |
-| R-2 | Current promotion helper runs lazily during payout requests and uses `date.today()`; no daily scheduler was found in `backend/app`. | High | Add a deployment-compatible daily trigger and catch-up processing. |
-| R-3 | Current payout reservation uses `pending`, sharing the state with maturity. | Medium | Introduce a distinct `reserved` state in the follow-up implementation. |
+| R-1 | Current `EventCreate.good_date` is optional, and commission code currently computes `available_on = (good_date or today) + 14 days`. | High | Resolved 2026-10-02: `good_date` and `payment_record_id` are required on sale events; `available_at` is UTC midnight of `good_date`; `available_on` dropped by `a1b2c3d4e5f6`. |
+| R-2 | Current promotion helper runs lazily during payout requests and uses `date.today()`; no daily scheduler was found in `backend/app`. | High | Resolved 2026-10-02: `backend/app/jobs/payout_maintenance.py` runs daily via EventBridge/ECS Fargate at 00:15 UTC with catch-up semantics. |
+| R-3 | Current payout reservation uses `pending`, sharing the state with maturity. | Medium | Resolved 2026-10-02: distinct `reserved` commission status added in `e8f9a0b1c2d3`. |
 
 ## Test cases
 
@@ -166,3 +166,4 @@ The workflow creates no external resources. Database writes are transactional. I
 | Date | Finding | Action taken |
 |---|---|---|
 | 2026-10-01 | Initial target workflow differs from current lazy 14-day `available_on` implementation. | Documented as Review; implementation remains pending. |
+| 2026-10-02 | Implemented by `2026-10-01-commission-availability-and-request-implementation-plan.md` on `feature/commission-availability-and-request`, with contract migration `a1b2c3d4e5f6`. | Backend 176 tests pass; scheduler stack validated; non-production Fargate run remains a deployment release-gate. |

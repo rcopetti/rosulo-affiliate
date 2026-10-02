@@ -207,7 +207,7 @@ Other open finance decisions remain: currency support stays currency-scoped with
 
 ### Workstream 0.6: Complete the commission-backed manual payout product
 
-**Status:** Product design approved and detailed implementation plans ready (2026-10-01); implementation not started.
+**Status:** Implemented (2026-10-02) across `feature/commission-availability-and-request` and `feature/merchant-manual-payout-operations`. Backend 176 tests, frontend 42 tests, and production build pass; Alembic head `a1b2c3d4e5f6`. Release gate pending: deploy/verify the non-production Fargate schedule and apply the expand/contract migration order.
 
 **Outcome:** Affiliates request payment for all or selected available whole commission rows; merchants inspect the complete batch, approve/reject it, manually pay through PayPal, record actual payment details, and affiliates receive a payout-detail email. Daily maturity follows the merchant-provided due date.
 

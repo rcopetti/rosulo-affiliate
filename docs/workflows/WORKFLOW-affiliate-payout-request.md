@@ -3,7 +3,7 @@
 **Version**: 1.0
 **Date**: 2026-10-01
 **Author**: Workflow design
-**Status**: Review
+**Status**: Implemented
 **Implements**: Commission-backed manual payout product design
 
 ## Overview
@@ -192,3 +192,4 @@ Paid payout: reserved commission -> paid
 | Date | Finding | Action taken |
 |---|---|---|
 | 2026-10-01 | Initial target request workflow differs from current currency-only request. | Documented as Review; implementation remains pending. |
+| 2026-10-02 | Implemented by `2026-10-01-commission-availability-and-request-implementation-plan.md` on `feature/commission-availability-and-request`. | All/selected whole-commission requests with atomic reservation verified; backend 176 tests pass. |
