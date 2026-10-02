@@ -172,6 +172,37 @@ async def test_preflight_rejects_legacy_payout_status():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payout_status", ["pending_approval", "approved"])
+async def test_preflight_requires_pending_status_for_commission_linked_to_active_payout(
+    payout_status,
+):
+    """A commission linked to an in-flight payout must still be stored
+    `pending`; any other status (e.g. `available`) would wedge reject/confirm
+    once the link is backfilled is_active."""
+    async with async_session() as session:
+        tenant, affiliate, commission = await _create_sale_commission(session)
+        commission.status = "available"
+        payout = await _create_payout(
+            session, affiliate, tenant, status=payout_status
+        )
+        session.add(
+            PayoutCommission(payout_id=payout.id, commission_id=commission.id)
+        )
+        await session.commit()
+        commission_id = commission.id
+
+    with pytest.raises(RuntimeError, match="not stored pending"):
+        await _run_preflight()
+
+    async with async_session() as session:
+        commission = await session.get(Commission, commission_id)
+        commission.status = "pending"
+        await session.commit()
+
+    await _run_preflight()
+
+
+@pytest.mark.asyncio
 async def test_preflight_accepts_clean_data():
     async with async_session() as session:
         tenant, affiliate, commission = await _create_sale_commission(session)

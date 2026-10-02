@@ -26,6 +26,14 @@ def utc_midnight(d: date) -> datetime:
 async def calculate_from_sale_event(
     db: AsyncSession, event: Event, affiliate: Affiliate
 ) -> Commission | None:
+    if event.good_date is None:
+        # Sale events ingested by older app versions may lack the merchant
+        # due date; there is no date to derive availability from, so record
+        # why no commission was created instead of inventing one.
+        event.commission_status = "missing_good_date"
+        await db.commit()
+        return None
+
     if not is_supported_currency(event.currency):
         event.commission_status = "currency_unsupported"
         await db.commit()

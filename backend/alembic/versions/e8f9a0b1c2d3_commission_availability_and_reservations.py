@@ -56,6 +56,19 @@ COMMISSIONS_WITH_MULTIPLE_ACTIVE_PAYOUTS_SQL = (
     "LIMIT 1"
 )
 
+# A commission linked to an in-flight payout must still be stored `pending`:
+# the reservation is expressed by the link plus the parent payout status, and
+# any other stored status (e.g. `available` behind an `is_active` link) would
+# permanently wedge reject/confirm under `_verify_linked_commissions`.
+COMMISSIONS_LOCKED_BY_ACTIVE_PAYOUT_NOT_PENDING_SQL = (
+    "SELECT 1 FROM payout_commissions AS link "
+    "JOIN payouts AS payout ON payout.id = link.payout_id "
+    "JOIN commissions AS commission ON commission.id = link.commission_id "
+    f"WHERE payout.status IN ({_ACTIVE_PAYOUT_STATUS_LIST}) "
+    "AND commission.status <> 'pending' "
+    "LIMIT 1"
+)
+
 # `available_at` is the merchant due date interpreted as 00:00 UTC. It is never
 # derived from the legacy `available_on` hold date.
 BACKFILL_COMMISSION_AVAILABLE_AT_SQL = (
@@ -105,6 +118,12 @@ def run_preflight(connection: Connection) -> None:
         COMMISSIONS_WITH_MULTIPLE_ACTIVE_PAYOUTS_SQL,
         "Cannot migrate payout reservations while a commission is linked to "
         "more than one pending_approval or approved payout",
+    )
+    _assert_no_rows(
+        connection,
+        COMMISSIONS_LOCKED_BY_ACTIVE_PAYOUT_NOT_PENDING_SQL,
+        "Cannot migrate payout reservations while a commission linked to a "
+        "pending_approval or approved payout is not stored pending",
     )
 
 
