@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
