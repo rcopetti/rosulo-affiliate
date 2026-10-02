@@ -6,6 +6,7 @@ and propagates failures so the container exits non-zero and the failed run is
 visible in ECS stopped-task / CloudWatch logs.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -65,10 +66,10 @@ async def test_run_maturity_job_logs_and_returns_summary(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_run_maturity_job_propagates_failure(monkeypatch):
+async def test_run_maturity_job_propagates_failure(monkeypatch, caplog):
     """A service failure propagates out of run_maturity_job so the ECS task
     exits non-zero; the session context still closes (rolling back any open
-    transaction)."""
+    transaction) and a failure record identifying the run is logged."""
 
     async def fake_mature(db, now_utc=None):
         raise RuntimeError("database connection lost")
@@ -76,7 +77,39 @@ async def test_run_maturity_job_propagates_failure(monkeypatch):
     monkeypatch.setattr(payout_maintenance, "mature_due_commissions", fake_mature)
     session = _FakeSession()
 
-    with pytest.raises(RuntimeError, match="database connection lost"):
+    with caplog.at_level(logging.INFO, logger="app.jobs.payout_maintenance"):
+        with pytest.raises(RuntimeError, match="database connection lost"):
+            await payout_maintenance.run_maturity_job(lambda: session)
+
+    assert session.closed is True
+
+    # The failed run is logged with its run_id so it is auditable in
+    # CloudWatch alongside the non-zero container exit.
+    failure_records = [
+        record
+        for record in caplog.records
+        if "payout maintenance run failed" in record.getMessage()
+    ]
+    assert failure_records, "expected a failure log record for the run"
+    assert any("run_id=" in record.getMessage() for record in failure_records)
+    assert any(record.levelno >= logging.ERROR for record in failure_records)
+
+
+@pytest.mark.asyncio
+async def test_run_maturity_job_times_out_and_closes_session(monkeypatch):
+    """When the service call exceeds JOB_TIMEOUT_SECONDS, the asyncio.timeout
+    expiry propagates out of run_maturity_job (non-zero container exit) and
+    the session context still closes."""
+
+    async def fake_mature(db, now_utc=None):
+        await asyncio.sleep(1)
+        return 0
+
+    monkeypatch.setattr(payout_maintenance, "mature_due_commissions", fake_mature)
+    monkeypatch.setattr(payout_maintenance, "JOB_TIMEOUT_SECONDS", 0.05)
+    session = _FakeSession()
+
+    with pytest.raises(asyncio.TimeoutError):
         await payout_maintenance.run_maturity_job(lambda: session)
 
     assert session.closed is True

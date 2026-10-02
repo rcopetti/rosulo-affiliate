@@ -56,7 +56,7 @@ Parameters:
     Description: >-
       ENABLED runs the job daily at 00:15 UTC. Deploy DISABLED while the
       task role, SSM parameter, and networking are reviewed, then flip on.
-    Default: ENABLED
+    Default: DISABLED
     AllowedValues: [ENABLED, DISABLED]
 
 Resources:
@@ -65,6 +65,7 @@ Resources:
   # ------------------------------------------------------------------
   PayoutMaintenanceLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
     Properties:
       LogGroupName: /ecs/affiliates-payout-maintenance
       RetentionInDays: !Ref LogRetentionInDays
@@ -107,6 +108,7 @@ Resources:
   # ------------------------------------------------------------------
   PayoutMaintenanceDLQ:
     Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
     Properties:
       QueueName: affiliates-payout-maintenance-dlq
       MessageRetentionPeriod: 1209600 # 14 days
