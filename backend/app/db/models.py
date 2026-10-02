@@ -216,6 +216,10 @@ class Event(Base):
             "event_id",
             name="uq_events_tenant_id_event_id",
         ),
+        CheckConstraint(
+            "type <> 'sale' OR (good_date IS NOT NULL AND payment_record_id IS NOT NULL AND length(btrim(payment_record_id)) > 0)",
+            name="ck_events_sale_payment_context",
+        ),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(String, nullable=False)
@@ -275,6 +279,7 @@ class Payout(Base):
             "status IN ('pending_approval', 'approved', 'rejected', 'paid')",
             name="ck_payouts_status",
         ),
+        Index("ix_payouts_affiliate_requested_at", "affiliate_id", "requested_at"),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
