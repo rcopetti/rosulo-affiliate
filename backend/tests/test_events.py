@@ -3,12 +3,14 @@ from datetime import date
 
 import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from app.core import money
 from app.core.security import hash_api_key
 from app.db.models import Affiliate, AffiliateAccount, Campaign, Commission, Event, Tenant
 from app.db.session import async_session
+from app.schemas.event import EventCreate
 
 
 @pytest.mark.asyncio
@@ -245,3 +247,18 @@ async def test_event_idempotency_is_scoped_to_tenant(
             select(func.count(Event.id)).where(Event.event_id == event_id)
         )
     assert count == 2
+
+
+def test_sale_event_requires_good_date():
+    with pytest.raises(ValidationError, match="good_date is required for sale events"):
+        EventCreate(event_id="sale-without-date", type="sale", payment_record_id="pay-1")
+
+
+def test_sale_event_requires_payment_record_id():
+    with pytest.raises(ValidationError, match="payment_record_id is required for sale events"):
+        EventCreate(event_id="sale-without-payment-id", type="sale", good_date=date(2026, 10, 1))
+
+
+def test_click_event_does_not_require_good_date():
+    event = EventCreate(event_id="click-without-date", type="click")
+    assert event.good_date is None

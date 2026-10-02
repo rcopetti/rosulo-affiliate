@@ -149,6 +149,7 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
             "currency": "EUR",
             "payment_sequence": 1,
             "good_date": str(sale_date),
+            "payment_record_id": "payout-pay-eur-matured",
         },
     )
     assert mature_eur_sale.status_code == 200

@@ -76,6 +76,7 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
                 "currency": currency,
                 "payment_sequence": 1,
                 "good_date": str(date.today()),
+                "payment_record_id": f"pay-{event_id}",
             },
         )
         assert response.status_code == 200

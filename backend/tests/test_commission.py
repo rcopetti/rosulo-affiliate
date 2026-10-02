@@ -83,6 +83,7 @@ async def test_sale_generates_commission(
             "currency": "EUR",
             "payment_sequence": 1,
             "good_date": str(date.today()),
+            "payment_record_id": "comm-pay-eur",
         },
     )
     assert eur_sale.status_code == 200
@@ -146,6 +147,7 @@ async def test_sale_without_matching_sequence_creates_no_commission(
             "amount": 200.0,
             "payment_sequence": 2,
             "good_date": str(date.today()),
+            "payment_record_id": "seq-pay-2",
         },
     )
     assert sale.status_code == 200
