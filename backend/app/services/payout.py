@@ -34,6 +34,11 @@ async def request_payout(
     if not eligibility["eligible"]:
         raise HTTPException(status_code=403, detail=eligibility["reason"])
 
+    if commission_ids is not None and not set(commission_ids):
+        # The request schema rejects empty selections, but direct service
+        # callers must not create a $0 payout with no links either.
+        raise HTTPException(status_code=400, detail="No commissions selected")
+
     filters = [
         Commission.affiliate_id == affiliate.id,
         Commission.currency == currency,
@@ -104,8 +109,7 @@ async def request_payout(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        diag = getattr(exc.orig, "diag", None)
-        if getattr(diag, "constraint_name", None) != "uq_payout_commissions_active_commission":
+        if _integrity_constraint_name(exc) != "uq_payout_commissions_active_commission":
             raise
         raise HTTPException(
             status_code=409,
@@ -113,6 +117,32 @@ async def request_payout(
         ) from exc
     await db.refresh(payout)
     return payout
+
+
+def _integrity_constraint_name(exc: IntegrityError) -> str | None:
+    """Return the name of the violated constraint across DBAPI drivers.
+
+    psycopg exposes ``diag.constraint_name`` on ``exc.orig``; asyncpg puts
+    ``constraint_name`` on the server error itself, which SQLAlchemy may
+    surface at ``exc.orig`` or nested under its ``__cause__`` /
+    ``__context__`` depending on the driver version.
+    """
+    queue = [exc.orig]
+    seen = set()
+    while queue:
+        current = queue.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        diag = getattr(current, "diag", None)
+        name = getattr(diag, "constraint_name", None) or getattr(
+            current, "constraint_name", None
+        )
+        if name:
+            return name
+        queue.append(getattr(current, "__cause__", None))
+        queue.append(getattr(current, "__context__", None))
+    return None
 
 
 async def get_payout(db: AsyncSession, payout_id: uuid.UUID, tenant: Tenant) -> Payout | None:
@@ -216,18 +246,25 @@ async def _verify_linked_commissions(
 ) -> list[Commission]:
     """Lock and validate the commissions reserved by this payout.
 
-    A linked commission is consistent when it is stored ``reserved`` behind
-    this payout's active ``PayoutCommission`` link, or — for rows written
-    before ``is_active`` existed — still stored ``pending`` with no active
-    link, because the parent payout's ``pending_approval``/``approved``
-    status alone expressed the reservation. Any other shape (a missing row,
-    an active link held by another payout, or an unexpected status) means
-    the reservation is inconsistent.
+    A linked commission is consistent when this payout holds its active
+    ``PayoutCommission`` link and it is stored ``reserved`` — or still
+    ``pending``, because migration ``e8f9a0b1c2d3`` backfilled
+    ``is_active=TRUE`` on links of in-flight payouts without rewriting
+    ``commission.status``. Rows linked before ``is_active`` existed are
+    consistent when stored ``pending`` with no active link, because the
+    parent payout's ``pending_approval``/``approved`` status alone
+    expressed the reservation. Any other shape (a missing row, an active
+    link held by another payout, or an unexpected status such as
+    ``available`` behind an active link) means the reservation is
+    inconsistent.
     """
     links = list(payout.payout_commissions)
     commission_ids = [link.commission_id for link in links]
     commissions_result = await db.execute(
-        select(Commission).where(Commission.id.in_(commission_ids)).with_for_update()
+        select(Commission)
+        .where(Commission.id.in_(commission_ids))
+        .order_by(Commission.id)
+        .with_for_update()
     )
     commissions = commissions_result.scalars().all()
     if len(commissions) != len(commission_ids):
@@ -246,13 +283,18 @@ async def _verify_linked_commissions(
     }
     for commission in commissions:
         holder = active_holders.get(commission.id)
-        if holder is not None:
-            if holder != payout.id or commission.status != "reserved":
+        if holder is None:
+            if commission.status != "pending":
                 raise HTTPException(
                     status_code=409,
                     detail="Payout commission reservation is inconsistent",
                 )
-        elif commission.status != "pending":
+        elif holder != payout.id:
+            raise HTTPException(
+                status_code=409,
+                detail="Payout commission reservation is inconsistent",
+            )
+        elif commission.status not in ("reserved", "pending"):
             raise HTTPException(
                 status_code=409,
                 detail="Payout commission reservation is inconsistent",

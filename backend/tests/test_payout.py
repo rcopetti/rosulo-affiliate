@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import func, select, update
@@ -21,6 +22,7 @@ from app.db.session import async_session
 from app.queue.handlers import handle_payout
 from app.schemas.payout import PayoutRequest
 from app.services.commission import mature_due_commissions, utc_midnight
+from app.services.payout import request_payout
 
 
 def test_payout_request_rejects_empty_commission_ids():
@@ -697,3 +699,111 @@ async def test_rejection_releases_commission_for_a_new_payout(
     by_payout = {str(link.payout_id): link for link in links}
     assert by_payout[first_payout_id].is_active is False
     assert by_payout[second_payout_id].is_active is True
+
+
+@pytest.mark.asyncio
+async def test_request_payout_empty_commission_ids_rejects(payout_scenario):
+    """An explicit empty selection only slips past the request schema on
+    direct service calls; the service must still refuse a $0 payout with
+    no links."""
+    async with payout_scenario.db_session() as db:
+        affiliate = await db.get(Affiliate, payout_scenario.affiliate_id)
+        with pytest.raises(HTTPException) as excinfo:
+            await request_payout(db, affiliate, "USD", [])
+    assert excinfo.value.status_code == 400
+    assert await _payout_count(payout_scenario) == 0
+
+
+@pytest.mark.asyncio
+async def test_request_payout_active_link_conflict_returns_409(
+    client: AsyncClient, payout_scenario
+):
+    """A commission still stored 'available' but already holding an active
+    link (a reservation race that outran the row lock) trips the partial
+    unique index; that IntegrityError must surface as 409, not 500."""
+    commission_id = await payout_scenario.create_commission(
+        PAST_DUE, "sel-index-race-1", status="available"
+    )
+    await payout_scenario.add_legacy_active_payout(
+        commission_id, payout_status="pending_approval", is_active=True
+    )
+
+    response = await _payout_request(
+        client,
+        payout_scenario,
+        {"currency": "USD", "commission_ids": [str(commission_id)]},
+    )
+
+    # The commission passes the availability count check because it is
+    # stored 'available', so this 409 can only come from the unique index.
+    assert response.status_code == 409
+    assert await payout_scenario.commission_status(commission_id) == "available"
+    assert await _payout_count(payout_scenario) == 1
+
+
+@pytest.mark.asyncio
+async def test_reject_releases_backfilled_pending_reservation(
+    client: AsyncClient, payout_scenario
+):
+    """Migration e8f9a0b1c2d3 backfilled is_active=TRUE on links of
+    in-flight payouts without rewriting commission.status, leaving the
+    shape (active link, commission 'pending'). Rejection must release it."""
+    commission_id = await payout_scenario.create_commission(
+        PAST_DUE, "migrated-reject-1", status="pending"
+    )
+    payout_id = await payout_scenario.add_legacy_active_payout(
+        commission_id, payout_status="pending_approval", is_active=True
+    )
+
+    rejected = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/reject",
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+    )
+
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+    assert await payout_scenario.commission_status(commission_id) == "available"
+    async with payout_scenario.db_session() as db:
+        link = await db.scalar(
+            select(PayoutCommission).where(PayoutCommission.payout_id == payout_id)
+        )
+    assert link.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_confirm_payment_settles_backfilled_pending_reservation(
+    client: AsyncClient, payout_scenario
+):
+    """The same backfilled shape must settle normally: approve then
+    confirm-payment lands the commission on 'paid' with its link inactive."""
+    commission_id = await payout_scenario.create_commission(
+        PAST_DUE, "migrated-pay-1", status="pending"
+    )
+    payout_id = await payout_scenario.add_legacy_active_payout(
+        commission_id, payout_status="pending_approval", is_active=True
+    )
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+
+    approved = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/approve",
+        headers=admin_headers,
+    )
+    assert approved.status_code == 200
+
+    confirmed = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json={
+            "payment_method": "bank_transfer",
+            "transfer_reference": "migrated-tx-1",
+        },
+    )
+
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "paid"
+    assert await payout_scenario.commission_status(commission_id) == "paid"
+    async with payout_scenario.db_session() as db:
+        link = await db.scalar(
+            select(PayoutCommission).where(PayoutCommission.payout_id == payout_id)
+        )
+    assert link.is_active is False

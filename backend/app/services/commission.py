@@ -179,11 +179,3 @@ async def create_reversal(db: AsyncSession, event: Event, affiliate: Affiliate) 
     await db.commit()
     await db.refresh(commission)
     return commission
-
-
-async def list_commissions(db: AsyncSession, affiliate: Affiliate, status: str | None = None):
-    query = select(Commission).where(Commission.affiliate_id == affiliate.id)
-    if status:
-        query = query.where(Commission.status == status)
-    result = await db.execute(query)
-    return result.scalars().all()

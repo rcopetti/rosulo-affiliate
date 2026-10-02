@@ -304,7 +304,7 @@ class Payout(Base):
     net_paid = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     paypal_batch_id = Column(String, nullable=True)
-    status = Column(String, default="requested")
+    status = Column(String, default="pending_approval")
     requested_at = Column(DateTime(timezone=True), default=now_utc)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     paid_at = Column(DateTime(timezone=True), nullable=True)
