@@ -975,6 +975,33 @@ async def test_confirm_payment_identical_retry_returns_existing(
 
 
 @pytest.mark.asyncio
+async def test_confirm_payment_retry_matches_same_instant_in_another_offset(
+    client: AsyncClient, payout_scenario
+):
+    payout_id = await _approved_payout_id(client, payout_scenario, "confirm-retry-2")
+    admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
+
+    first = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=_confirm_payload(),
+    )
+    same_instant = PAID_AT_PAST.astimezone(timezone(timedelta(hours=5, minutes=30)))
+    second = await client.post(
+        f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
+        headers=admin_headers,
+        json=_confirm_payload(paid_at=same_instant.isoformat()),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert (
+        second.json()["payout_payment"]["id"]
+        == first.json()["payout_payment"]["id"]
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "conflict",
     [

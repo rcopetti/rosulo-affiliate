@@ -218,7 +218,7 @@ async def confirm_payout_payment(
         if (
             existing
             and existing.paid_at == paid_at
-            and existing.transfer_reference == transfer_reference
+            and existing.transfer_reference.strip() == transfer_reference
         ):
             return payout
         raise HTTPException(status_code=409, detail="Payout was confirmed with different payment details")
@@ -248,8 +248,17 @@ async def confirm_payout_payment(
     previous_status = payout.status
     payout.status = "paid"
     payout.paid_at = paid_at
-    await _record_transition(db, payout, previous_status, payout.status, reviewer)
-    await db.commit()
+    try:
+        await _record_transition(db, payout, previous_status, payout.status, reviewer)
+        await db.commit()
+    except IntegrityError as exc:
+        # The payout row lock serializes concurrent confirms, but migrated
+        # payout_payments/payout_notifications rows can still collide with a
+        # re-confirmed legacy payout.
+        await db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Payout payment already recorded"
+        ) from exc
     await db.refresh(payout)
     return payout
 
