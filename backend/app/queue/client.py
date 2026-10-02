@@ -1,15 +1,6 @@
-import json
+"""Outbound payout dispatch was retired.
 
-import boto3
-
-from app.core.config import settings
-
-
-def publish_payout(payout_id: str):
-    if not settings.sqs_queue_url:
-        return
-    sqs = boto3.client("sqs")
-    sqs.send_message(
-        QueueUrl=settings.sqs_queue_url,
-        MessageBody=json.dumps({"type": "payout", "payout_id": payout_id}),
-    )
+``publish_payout`` was removed so no application path can enqueue a new
+provider transfer. The SQS worker (``app.queue.worker``) remains only to
+drain stale payout messages through the no-op ``handle_payout`` handler.
+"""

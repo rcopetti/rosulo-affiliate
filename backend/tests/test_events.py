@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -8,9 +8,19 @@ from sqlalchemy import func, select
 
 from app.core import money
 from app.core.security import hash_api_key
-from app.db.models import Affiliate, AffiliateAccount, Campaign, Commission, Event, Tenant
+from app.db.models import (
+    Affiliate,
+    AffiliateAccount,
+    Campaign,
+    Commission,
+    Contract,
+    Event,
+    Tenant,
+    Term,
+)
 from app.db.session import async_session
 from app.schemas.event import EventCreate
+from app.services.commission import mature_due_commissions
 
 
 @pytest.mark.asyncio
@@ -247,6 +257,113 @@ async def test_event_idempotency_is_scoped_to_tenant(
             select(func.count(Event.id)).where(Event.event_id == event_id)
         )
     assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_tenant_webhook_is_retired(client: AsyncClient, tenant: Tenant):
+    """Incoming payment-record ingestion was replaced by confirmed sale
+    events carrying their own ``good_date`` and ``payment_record_id``."""
+    response = await client.post(
+        "/api/v1/webhooks/tenant",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "payment_record_id": "retired-pay-1",
+            "customer_id": "cust-1",
+            "amount": 100.0,
+            "currency": "USD",
+            "sequence_number": 1,
+            "status": "paid",
+        },
+    )
+    assert response.status_code == 410
+    assert response.json()["detail"] == (
+        "Incoming payment-record webhooks are retired; send a confirmed sale event"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sale_event_stores_payment_record_id_and_matures_on_good_date(
+    client: AsyncClient, tenant: Tenant
+):
+    """``payment_record_id`` stays on the sale Event verbatim as the
+    merchant's external correlation string (no FK to a payment row), and
+    ``good_date`` alone — no incoming-payment webhook — controls when the
+    commission becomes available."""
+    async with async_session() as db:
+        account = AffiliateAccount(
+            email="sale-correlation@example.com",
+            password_hash="unused",
+            name="Sale Correlation Affiliate",
+            country="US",
+        )
+        db.add(account)
+        await db.flush()
+        affiliate = Affiliate(
+            affiliate_account_id=account.id, tenant_id=tenant.id
+        )
+        db.add(affiliate)
+        await db.flush()
+        contract = Contract(affiliate_id=affiliate.id)
+        db.add(contract)
+        await db.flush()
+        db.add(
+            Term(
+                contract_id=contract.id,
+                payment_sequence=1,
+                commission_percent=10,
+            )
+        )
+        db.add(
+            Campaign(
+                affiliate_id=affiliate.id,
+                tenant_id=tenant.id,
+                tracking_code="sale-correlation-code",
+                landing_url="https://example.com/sale",
+            )
+        )
+        await db.commit()
+
+    good_date = date.today() - timedelta(days=5)
+    sale = await client.post(
+        "/api/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "event_id": "sale-correlation-1",
+            "type": "sale",
+            "tracking_code": "sale-correlation-code",
+            "customer_id": "cust-correlation-1",
+            "amount": 50.0,
+            "currency": "USD",
+            "payment_sequence": 1,
+            "good_date": str(good_date),
+            "payment_record_id": "merchant-tx-abc-123",
+        },
+    )
+    assert sale.status_code == 200
+    assert sale.json()["payment_record_id"] == "merchant-tx-abc-123"
+    event_uuid = uuid.UUID(sale.json()["id"])
+
+    async with async_session() as db:
+        stored = await db.get(Event, event_uuid)
+        assert stored.payment_record_id == "merchant-tx-abc-123"
+        commission = (
+            await db.execute(
+                select(Commission).where(Commission.event_id == event_uuid)
+            )
+        ).scalar_one()
+        assert commission.status == "pending"
+        assert commission.available_on == good_date
+
+    # No webhook call: maturing due commissions promotes purely on good_date.
+    async with async_session() as db:
+        assert await mature_due_commissions(db) == 1
+    async with async_session() as db:
+        assert (
+            await db.scalar(
+                select(Commission.status).where(Commission.event_id == event_uuid)
+            )
+            == "available"
+        )
 
 
 def test_sale_event_requires_good_date():

@@ -135,19 +135,8 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
         },
     )
 
-    # payment record webhook
-    await client.post(
-        "/api/v1/webhooks/tenant",
-        headers={"X-API-Key": "test-api-key"},
-        json={
-            "payment_record_id": "payout-pay-1",
-            "customer_id": "cust-1",
-            "amount": 100.0,
-            "currency": "USD",
-            "sequence_number": 1,
-            "status": "paid",
-        },
-    )
+    # No incoming-payment webhook call: the sale's merchant-provided
+    # good_date alone controls when the commission becomes available.
 
     # A merchant due date comfortably in the future keeps this commission
     # pending. +2 days so local-tomorrow's UTC midnight is never already past
@@ -169,18 +158,6 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
         },
     )
     assert eur_sale.status_code == 200
-    await client.post(
-        "/api/v1/webhooks/tenant",
-        headers={"X-API-Key": "test-api-key"},
-        json={
-            "payment_record_id": "payout-pay-eur",
-            "customer_id": "cust-eur",
-            "amount": 100.0,
-            "currency": "EUR",
-            "sequence_number": 1,
-            "status": "paid",
-        },
-    )
 
     mature_eur_sale = await client.post(
         "/api/v1/events",
@@ -256,10 +233,8 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
     paypal_webhook = await client.post("/api/v1/webhooks/paypal", json={})
     assert paypal_webhook.status_code == 410
 
-    async def unexpected_provider_transfer(*args, **kwargs):
-        raise AssertionError("Manual payouts must not dispatch to PayPal")
-
-    monkeypatch.setattr("app.integrations.paypal.send_payout", unexpected_provider_transfer)
+    # A stale SQS payout message drained by the worker is a no-op: it must
+    # not dispatch a provider transfer or touch the payout/commissions.
     async with async_session() as db:
         await handle_payout(db, payout_id)
     approved_payout = await client.get(
@@ -267,6 +242,13 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert approved_payout.json()["status"] == "approved"
+    commissions = await client.get(
+        "/api/v1/affiliate/commissions",
+        headers=affiliate_headers,
+    )
+    assert next(
+        c for c in commissions.json() if c["currency"] == "USD"
+    )["status"] == "reserved"
 
     duplicate_approval = await client.post(
         f"/api/v1/admin/payouts/{payout_id}/approve",
