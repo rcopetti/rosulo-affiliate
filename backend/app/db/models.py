@@ -10,11 +10,13 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -265,6 +267,12 @@ class PaymentRecord(Base):
 
 class Commission(Base):
     __tablename__ = "commissions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'available', 'reserved', 'paid', 'reversed')",
+            name="ck_commissions_status",
+        ),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
@@ -275,6 +283,7 @@ class Commission(Base):
     currency = Column(String, default="USD")
     status = Column(String, default="pending")
     available_on = Column(Date, nullable=True)
+    available_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -315,10 +324,19 @@ class Payout(Base):
 
 class PayoutCommission(Base):
     __tablename__ = "payout_commissions"
+    __table_args__ = (
+        Index(
+            "uq_payout_commissions_active_commission",
+            "commission_id",
+            unique=True,
+            postgresql_where=text("is_active IS TRUE"),
+        ),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
     commission_id = Column(UUID(as_uuid=True), ForeignKey("commissions.id"), nullable=False)
     amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    is_active = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     payout = relationship("Payout", back_populates="payout_commissions")
     commission = relationship("Commission", back_populates="payout_commissions")
