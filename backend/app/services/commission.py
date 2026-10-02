@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -91,12 +91,76 @@ async def calculate_from_sale_event(
         net_amount=net,
         currency=event.currency,
         status="pending",
-        available_on=(event.good_date or today) + timedelta(days=14),
+        available_on=event.good_date,
+        available_at=datetime(
+            event.good_date.year,
+            event.good_date.month,
+            event.good_date.day,
+            tzinfo=timezone.utc,
+        ),
     )
     db.add(commission)
     await db.commit()
     await db.refresh(commission)
     return commission
+
+
+async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = None) -> int:
+    """Promote pending commissions whose merchant due date has arrived.
+
+    Rows are selected in deterministic order and locked with
+    ``FOR UPDATE ... SKIP LOCKED`` so overlapping scheduled runs never
+    promote the same row twice; promotion is conditional on the row still
+    being ``pending``. Commissions holding a reservation — an active
+    ``PayoutCommission`` link or a legacy link whose parent payout is still
+    ``pending_approval``/``approved`` — are skipped.
+
+    Rows written by an older app version after the expand migration may have
+    a null ``available_at``; the due instant is then derived as UTC midnight
+    of ``Event.good_date`` and both ``available_at`` and the legacy
+    ``available_on`` are backfilled from it.
+    """
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+
+    active_reservation = (
+        select(PayoutCommission.id)
+        .join(Payout, Payout.id == PayoutCommission.payout_id)
+        .where(
+            PayoutCommission.commission_id == Commission.id,
+            or_(
+                PayoutCommission.is_active.is_(True),
+                Payout.status.in_(("pending_approval", "approved")),
+            ),
+        )
+        .exists()
+    )
+    result = await db.execute(
+        select(Commission, Event)
+        .join(Event, Event.id == Commission.event_id)
+        .where(Commission.status == "pending", ~active_reservation)
+        .order_by(Commission.id)
+        .with_for_update(of=Commission, skip_locked=True)
+    )
+    promoted = 0
+    for commission, event in result.all():
+        due_at = commission.available_at
+        if due_at is None:
+            if event.good_date is None:
+                continue
+            due_at = datetime(
+                event.good_date.year,
+                event.good_date.month,
+                event.good_date.day,
+                tzinfo=timezone.utc,
+            )
+            commission.available_at = due_at
+            commission.available_on = event.good_date
+        if due_at <= now_utc:
+            commission.status = "available"
+            promoted += 1
+    await db.commit()
+    return promoted
 
 
 async def mark_available_commissions(db: AsyncSession, affiliate_id: UUID):

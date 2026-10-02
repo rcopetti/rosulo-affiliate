@@ -119,7 +119,8 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
             "amount": 100.0,
             "currency": "EUR",
             "payment_sequence": 1,
-            "good_date": str(date.today()),
+            # future merchant due date keeps this commission pending
+            "good_date": str(date.today() + timedelta(days=1)),
             "payment_record_id": "payout-pay-eur",
         },
     )
@@ -192,11 +193,11 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
     for commission in commissions.json():
         by_currency.setdefault(commission["currency"], []).append(commission)
     assert by_currency["USD"][0]["status"] == "pending"
-    assert by_currency["USD"][0]["available_on"] == str(sale_date + timedelta(days=14))
+    assert by_currency["USD"][0]["available_on"] == str(sale_date)
     assert sorted(item["status"] for item in by_currency["EUR"]) == ["available", "pending"]
     assert sorted(item["available_on"] for item in by_currency["EUR"]) == [
-        str(sale_date + timedelta(days=14)),
-        str(date.today() + timedelta(days=14)),
+        str(sale_date),
+        str(date.today() + timedelta(days=1)),
     ]
 
     premature_payment = await client.post(

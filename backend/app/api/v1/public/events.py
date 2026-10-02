@@ -28,7 +28,5 @@ async def ingest_event(
         from app.db.models import Affiliate
 
         affiliate = await db.get(Affiliate, event.affiliate_id)
-        commission = await commission_service.calculate_from_sale_event(db, event, affiliate)
-        if commission:
-            await commission_service.mark_available_commissions(db, event.affiliate_id)
+        await commission_service.calculate_from_sale_event(db, event, affiliate)
     return event
