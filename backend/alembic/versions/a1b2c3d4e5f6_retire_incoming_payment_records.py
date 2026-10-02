@@ -32,6 +32,24 @@ SALE_EVENTS_MISSING_PAYMENT_CONTEXT_SQL = (
     "LIMIT 1"
 )
 
+# Same check f9a0b1c2d3e4 applied: affiliate_payout rows written by old
+# code after that revision ran must still carry the full audit fields
+# before they can be re-copied into payout_payments. Anything missing is
+# unrecoverable legacy data and must abort cleanly here rather than die
+# on the copy's IntegrityError.
+AFFILIATE_PAYOUT_RECORDS_MISSING_FIELDS_SQL = (
+    "SELECT 1 FROM payment_records "
+    "WHERE record_type = 'affiliate_payout' "
+    "AND (payout_id IS NULL "
+    "OR transfer_reference IS NULL OR length(btrim(transfer_reference)) = 0 "
+    "OR payment_method IS NULL OR length(btrim(payment_method)) = 0 "
+    "OR amount IS NULL "
+    "OR currency IS NULL OR length(btrim(currency)) = 0 "
+    "OR paid_at IS NULL "
+    "OR recorded_by_tenant_user_id IS NULL) "
+    "LIMIT 1"
+)
+
 # An unknown record_type is unmapped data that must be resolved before the
 # table can be dropped.
 PAYMENT_RECORDS_WITH_UNKNOWN_TYPE_SQL = (
@@ -71,33 +89,30 @@ COMMISSIONS_WITH_MULTIPLE_INFLIGHT_PAYOUTS_SQL = (
 # Stale reservations: a link to an already-closed payout wedges the
 # commission (it blocks maturity promotion and re-request) without holding a
 # real reservation. Mirror reject_payout/confirm_payout_payment: paid
-# payouts settle their commissions, rejected ones release them.
+# payouts settle their commissions, rejected ones release them. Both are
+# keyed on link EXISTENCE, not is_active — a partial legacy write can leave
+# the flag false. An `available` row linked to a paid payout is still
+# re-sellable (a double-pay path), so settling it is the fail-safe.
+# `reversed` rows are never rewritten.
 SETTLE_RESERVED_COMMISSIONS_OF_PAID_PAYOUTS_SQL = (
     "UPDATE commissions SET status = 'paid' "
-    "WHERE status = 'reserved' AND EXISTS ("
+    "WHERE status IN ('pending', 'reserved', 'available') AND EXISTS ("
     "SELECT 1 FROM payout_commissions AS link "
     "JOIN payouts AS payout ON payout.id = link.payout_id "
     "WHERE link.commission_id = commissions.id "
-    "AND link.is_active IS TRUE "
     "AND payout.status = 'paid'"
     ")"
 )
 
+# Runs after SETTLE, so a commission somehow linked to both a paid and a
+# rejected payout stays settled — the paid path wins. `available` behind a
+# rejected link is already correct and needs no rewrite.
 RELEASE_RESERVED_COMMISSIONS_OF_REJECTED_PAYOUTS_SQL = (
     "UPDATE commissions SET status = 'available' "
-    "WHERE status = 'reserved' "
-    "AND NOT EXISTS ("
+    "WHERE status IN ('pending', 'reserved') AND EXISTS ("
     "SELECT 1 FROM payout_commissions AS link "
     "JOIN payouts AS payout ON payout.id = link.payout_id "
     "WHERE link.commission_id = commissions.id "
-    "AND link.is_active IS TRUE "
-    "AND payout.status = 'paid'"
-    ") "
-    "AND EXISTS ("
-    "SELECT 1 FROM payout_commissions AS link "
-    "JOIN payouts AS payout ON payout.id = link.payout_id "
-    "WHERE link.commission_id = commissions.id "
-    "AND link.is_active IS TRUE "
     "AND payout.status = 'rejected'"
     ")"
 )
@@ -118,11 +133,12 @@ ACTIVATE_INFLIGHT_PAYOUT_LINKS_SQL = (
     "AND payout_commissions.is_active IS FALSE"
 )
 
-# New code stores linked commissions `reserved`; rows written while old code
-# ran may still be `pending` behind a now-active link.
+# New code stores linked commissions `reserved`; rows written while old
+# code ran may still be `pending` — or `available`, which would stay
+# re-bookable — behind a now-active link.
 RESERVE_LINKED_PENDING_COMMISSIONS_SQL = (
     "UPDATE commissions SET status = 'reserved' "
-    "WHERE status = 'pending' AND EXISTS ("
+    "WHERE status IN ('pending', 'available') AND EXISTS ("
     "SELECT 1 FROM payout_commissions AS link "
     "JOIN payouts AS payout ON payout.id = link.payout_id "
     "WHERE link.commission_id = commissions.id "
@@ -131,10 +147,30 @@ RESERVE_LINKED_PENDING_COMMISSIONS_SQL = (
     ")"
 )
 
+# Defensive corruption cleanup: a `reserved` commission with no active link
+# and no link to a paid payout is wedged — nothing will ever settle or
+# release it. After the steps above this matches only truly orphaned rows.
+RELEASE_WEDGED_RESERVED_COMMISSIONS_SQL = (
+    "UPDATE commissions SET status = 'available' "
+    "WHERE status = 'reserved' "
+    "AND NOT EXISTS ("
+    "SELECT 1 FROM payout_commissions AS link "
+    "WHERE link.commission_id = commissions.id AND link.is_active IS TRUE"
+    ") "
+    "AND NOT EXISTS ("
+    "SELECT 1 FROM payout_commissions AS link "
+    "JOIN payouts AS payout ON payout.id = link.payout_id "
+    "WHERE link.commission_id = commissions.id "
+    "AND payout.status = 'paid'"
+    ")"
+)
+
 # Mirror mature_due_commissions conservatively: a due pending commission
 # with no active reservation becomes available. Rows with NULL available_at
 # are left for the runtime job, which derives the due instant from
-# events.good_date.
+# events.good_date. Any link to a paid payout also blocks promotion:
+# settling it above is the fail-safe — promoting it would let the
+# commission be re-reserved and double-paid.
 PROMOTE_DUE_UNRESERVED_COMMISSIONS_SQL = (
     "UPDATE commissions SET status = 'available' "
     "WHERE status = 'pending' "
@@ -142,6 +178,12 @@ PROMOTE_DUE_UNRESERVED_COMMISSIONS_SQL = (
     "AND NOT EXISTS ("
     "SELECT 1 FROM payout_commissions AS link "
     "WHERE link.commission_id = commissions.id AND link.is_active IS TRUE"
+    ") "
+    "AND NOT EXISTS ("
+    "SELECT 1 FROM payout_commissions AS link "
+    "JOIN payouts AS payout ON payout.id = link.payout_id "
+    "WHERE link.commission_id = commissions.id "
+    "AND payout.status = 'paid'"
     ")"
 )
 
@@ -197,6 +239,13 @@ def run_preflight(connection: Connection) -> None:
         PAYMENT_RECORDS_WITH_UNKNOWN_TYPE_SQL,
         "Cannot retire payment_records while a record_type outside "
         "incoming_payment or affiliate_payout exists",
+    )
+    _assert_no_rows(
+        connection,
+        AFFILIATE_PAYOUT_RECORDS_MISSING_FIELDS_SQL,
+        "Cannot retire payment_records while an affiliate_payout row lacks "
+        "a payout_id, transfer_reference, payment_method, amount, "
+        "currency, paid_at, or recorded_by_tenant_user_id",
     )
     _assert_no_rows(
         connection,
@@ -265,6 +314,7 @@ def upgrade() -> None:
     op.execute(sa.text(DEACTIVATE_CLOSED_PAYOUT_LINKS_SQL))
     op.execute(sa.text(ACTIVATE_INFLIGHT_PAYOUT_LINKS_SQL))
     op.execute(sa.text(RESERVE_LINKED_PENDING_COMMISSIONS_SQL))
+    op.execute(sa.text(RELEASE_WEDGED_RESERVED_COMMISSIONS_SQL))
     op.execute(sa.text(PROMOTE_DUE_UNRESERVED_COMMISSIONS_SQL))
 
     op.execute(sa.text(COPY_AFFILIATE_PAYOUT_RECORDS_SQL))

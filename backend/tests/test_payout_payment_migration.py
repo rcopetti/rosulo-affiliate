@@ -1000,6 +1000,190 @@ async def test_retire_reconciles_reservations_and_matures_due_commissions():
 
 
 @pytest.mark.asyncio
+async def test_retire_settles_available_commission_behind_paid_payout_link():
+    """A partial legacy write can leave a paid payout's link inactive while
+    the commission reads `available` — re-sellable, i.e. a double-pay path.
+    The settlement must key on link existence and pay the commission out."""
+    database = await _create_disposable_database()
+    try:
+        base = _run_alembic(database, "upgrade", "f9a0b1c2d3e4")
+        assert base.returncode == 0, base.stderr + base.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            ids = await _insert_org(conn)
+            event_id = await _insert_sale_event(conn, ids, "double-pay")
+            commission_id = await _insert_commission(
+                conn, ids, event_id, "available"
+            )
+            paid_payout = await _insert_payout(conn, ids, "paid")
+            link_id = await _insert_payout_commission(
+                conn, paid_payout, commission_id, is_active=False
+            )
+        finally:
+            await conn.close()
+
+        upgrade = _run_alembic(database, "upgrade", "head")
+        assert upgrade.returncode == 0, upgrade.stderr + upgrade.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            assert await _alembic_version(database) == "a1b2c3d4e5f6"
+            assert (
+                await conn.fetchval(
+                    "SELECT status FROM commissions WHERE id = $1",
+                    commission_id,
+                )
+                == "paid"
+            )
+            assert (
+                await conn.fetchval(
+                    "SELECT is_active FROM payout_commissions WHERE id = $1",
+                    link_id,
+                )
+                is False
+            )
+        finally:
+            await conn.close()
+    finally:
+        await _drop_disposable_database(database)
+
+
+@pytest.mark.asyncio
+async def test_retire_reserves_available_commission_behind_inflight_link():
+    """An `available` commission whose link to an in-flight payout was
+    written inactive would stay re-bookable once the link activates; the
+    migration must activate the link and reserve the commission."""
+    database = await _create_disposable_database()
+    try:
+        base = _run_alembic(database, "upgrade", "f9a0b1c2d3e4")
+        assert base.returncode == 0, base.stderr + base.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            ids = await _insert_org(conn)
+            event_id = await _insert_sale_event(conn, ids, "rebookable")
+            commission_id = await _insert_commission(
+                conn, ids, event_id, "available"
+            )
+            inflight_payout = await _insert_payout(
+                conn, ids, "pending_approval"
+            )
+            link_id = await _insert_payout_commission(
+                conn, inflight_payout, commission_id, is_active=False
+            )
+        finally:
+            await conn.close()
+
+        upgrade = _run_alembic(database, "upgrade", "head")
+        assert upgrade.returncode == 0, upgrade.stderr + upgrade.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            assert await _alembic_version(database) == "a1b2c3d4e5f6"
+            assert (
+                await conn.fetchval(
+                    "SELECT is_active FROM payout_commissions WHERE id = $1",
+                    link_id,
+                )
+                is True
+            )
+            assert (
+                await conn.fetchval(
+                    "SELECT status FROM commissions WHERE id = $1",
+                    commission_id,
+                )
+                == "reserved"
+            )
+        finally:
+            await conn.close()
+    finally:
+        await _drop_disposable_database(database)
+
+
+@pytest.mark.asyncio
+async def test_retire_settles_due_pending_commission_behind_paid_link():
+    """A due pending commission with an inactive link to a paid payout must
+    settle to paid — promoting it to available would open a re-reserve
+    double-pay path."""
+    database = await _create_disposable_database()
+    try:
+        base = _run_alembic(database, "upgrade", "f9a0b1c2d3e4")
+        assert base.returncode == 0, base.stderr + base.stdout
+
+        due_at = datetime(2026, 1, 15, tzinfo=timezone.utc)
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            ids = await _insert_org(conn)
+            event_id = await _insert_sale_event(conn, ids, "due-paid")
+            commission_id = await _insert_commission(
+                conn, ids, event_id, "pending", available_at=due_at
+            )
+            paid_payout = await _insert_payout(conn, ids, "paid")
+            await _insert_payout_commission(
+                conn, paid_payout, commission_id, is_active=False
+            )
+        finally:
+            await conn.close()
+
+        upgrade = _run_alembic(database, "upgrade", "head")
+        assert upgrade.returncode == 0, upgrade.stderr + upgrade.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            assert await _alembic_version(database) == "a1b2c3d4e5f6"
+            assert (
+                await conn.fetchval(
+                    "SELECT status FROM commissions WHERE id = $1",
+                    commission_id,
+                )
+                == "paid"
+            )
+        finally:
+            await conn.close()
+    finally:
+        await _drop_disposable_database(database)
+
+
+@pytest.mark.asyncio
+async def test_retire_releases_orphaned_reserved_commission():
+    """A `reserved` commission with no payout links at all is wedged —
+    nothing will ever settle or release it — so the migration frees it."""
+    database = await _create_disposable_database()
+    try:
+        base = _run_alembic(database, "upgrade", "f9a0b1c2d3e4")
+        assert base.returncode == 0, base.stderr + base.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            ids = await _insert_org(conn)
+            event_id = await _insert_sale_event(conn, ids, "orphaned")
+            commission_id = await _insert_commission(
+                conn, ids, event_id, "reserved"
+            )
+        finally:
+            await conn.close()
+
+        upgrade = _run_alembic(database, "upgrade", "head")
+        assert upgrade.returncode == 0, upgrade.stderr + upgrade.stdout
+
+        conn = await asyncpg.connect(_disposable_dsn(database))
+        try:
+            assert await _alembic_version(database) == "a1b2c3d4e5f6"
+            assert (
+                await conn.fetchval(
+                    "SELECT status FROM commissions WHERE id = $1",
+                    commission_id,
+                )
+                == "available"
+            )
+        finally:
+            await conn.close()
+    finally:
+        await _drop_disposable_database(database)
+
+
+@pytest.mark.asyncio
 async def test_retire_downgrade_refuses_when_payout_data_exists():
     database = await _create_disposable_database()
     try:
