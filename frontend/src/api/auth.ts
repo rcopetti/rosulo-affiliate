@@ -1,5 +1,5 @@
 import { api } from './client';
-import { AffiliateAccount, PendingInvite, Tenant } from './types';
+import { AffiliateAccount, LinkedMerchant, PendingInvite, Tenant } from './types';
 
 export interface LoginRequest {
   email: string;
@@ -47,8 +47,8 @@ export async function acceptInvite(data: AcceptInviteRequest): Promise<AuthRespo
   return res.data;
 }
 
-export async function fetchMerchants(): Promise<Tenant[]> {
-  const res = await api.get<Tenant[]>('/affiliate/merchants');
+export async function fetchMerchants(): Promise<LinkedMerchant[]> {
+  const res = await api.get<LinkedMerchant[]>('/affiliate/merchants');
   return res.data;
 }
 

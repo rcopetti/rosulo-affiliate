@@ -5,6 +5,14 @@ export interface Tenant {
   allowed_domains?: string[];
 }
 
+// GET /affiliate/merchants keys linked merchants by tenant_id (the value sent
+// as X-Tenant-Id), unlike auth responses that use the Tenant shape's `id`.
+export interface LinkedMerchant {
+  tenant_id: string;
+  name: string;
+  payout_eligibility?: { status: string };
+}
+
 export interface AffiliateAccount {
   id: string;
   email: string;

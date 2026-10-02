@@ -22,14 +22,8 @@ export function MerchantSelectPage() {
       setTenant(tenantId);
       // Continue to a preserved payout deep link only when it targets the
       // merchant the affiliate just selected; anything else falls back to
-      // the dashboard. The merchants endpoint keys tenants as `tenant_id`
-      // while login responses use `id` — accept either shape here.
-      const merchantIds = (merchants ?? [])
-        .flatMap((merchant) => [
-          merchant.id,
-          (merchant as { tenant_id?: string }).tenant_id,
-        ])
-        .filter((value): value is string => !!value);
+      // the dashboard.
+      const merchantIds = (merchants ?? []).map((merchant) => merchant.tenant_id);
       const returnTo = safeAffiliateReturnTo(
         searchParams.get('returnTo'),
         merchantIds
@@ -56,8 +50,8 @@ export function MerchantSelectPage() {
           {merchants?.length ? (
             merchants.map((m) => (
               <button
-                key={m.id}
-                onClick={() => handleSelect(m.id)}
+                key={m.tenant_id}
+                onClick={() => handleSelect(m.tenant_id)}
                 className="w-full cursor-pointer rounded-lg border border-line bg-surface p-4 text-left transition hover:border-primary hover:shadow-sm"
               >
                 <p className="font-semibold text-slate-900">{m.name}</p>
