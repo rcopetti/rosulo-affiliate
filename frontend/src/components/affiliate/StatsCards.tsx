@@ -25,12 +25,12 @@ export function StatsCards({ earned, pending, available, reserved, paid, currenc
     { label: 'Earned', value: earned, icon: CircleDollarSign, accent: 'text-info bg-info-soft' },
     { label: 'Pending', value: pending, icon: Clock, accent: 'text-warning bg-warning-soft' },
     { label: 'Available', value: available, icon: Wallet, accent: 'text-success bg-success-soft' },
-    { label: 'Reserved', value: reserved, icon: Hourglass, accent: 'text-primary bg-primary/10' },
+    { label: 'Reserved', value: reserved, icon: Hourglass, accent: 'text-info-fg bg-info-soft' },
     { label: 'Paid', value: paid, icon: HandCoins, accent: 'text-fg-muted bg-surface-muted' },
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
       {items.map((i) => (
         <Card key={i.label} className="p-5">
           <div className="flex items-center justify-between gap-3">

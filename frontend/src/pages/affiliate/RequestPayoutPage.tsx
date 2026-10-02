@@ -103,17 +103,29 @@ export function RequestPayoutPage() {
       ]
     : [];
 
-  const canSubmit = payoutEligible && Boolean(currency) && payable.length > 0;
+  const currencyAvailable =
+    balance.balances_by_currency.find((item) => item.currency === currency)?.available ?? 0;
+  // In "all" mode the server derives the payable set from the balance, so a
+  // currency with available funds is submittable even if the commissions list
+  // is empty or still loading. "Selected" mode still requires ≥1 chosen row.
+  const hasPayable = mode === 'all' ? currencyAvailable > 0 || payable.length > 0 : payable.length > 0;
+  const canSubmit = payoutEligible && Boolean(currency) && hasPayable;
   const submitLabel = !currency
     ? 'Select a currency with available balance'
-    : payable.length > 0
-      ? `Request payout of ${formatCurrency(totals.net, currency)}`
-      : 'Request payout';
+    : mode === 'all'
+      ? hasPayable
+        ? `Request payout of ${formatCurrency(currencyAvailable > 0 ? currencyAvailable : totals.net, currency)}`
+        : 'No payable commissions in this currency'
+      : payable.length > 0
+        ? `Request payout of ${formatCurrency(totals.net, currency)}`
+        : eligibleCommissions.length > 0 || commissions === undefined
+          ? 'Select at least one commission'
+          : 'No payable commissions in this currency';
 
   return (
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-bold text-slate-900">Request Payout</h1>
-      {!payoutEligible && (
+      {documentStatus !== undefined && !payoutEligible && (
         <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning-fg" role="status">
           {eligibility?.reason || 'Your tax document is not yet eligible for payout.'}
         </div>
@@ -222,7 +234,12 @@ export function RequestPayoutPage() {
             </>
           )}
           <p className="flex items-center gap-2 text-sm text-slate-600">
-            Tax document status: <KycStatusBadge status={eligibility?.status ?? 'missing'} />
+            Tax document status:{' '}
+            {documentStatus === undefined ? (
+              <span className="text-fg-muted">Loading…</span>
+            ) : (
+              <KycStatusBadge status={eligibility?.status ?? 'missing'} />
+            )}
           </p>
           <Button
             className="w-full"

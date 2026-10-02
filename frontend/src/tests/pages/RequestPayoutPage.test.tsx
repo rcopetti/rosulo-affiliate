@@ -181,6 +181,34 @@ describe('RequestPayoutPage', () => {
     });
   });
 
+  it('allows an all-available payout when the commissions list is empty but the balance has available funds', async () => {
+    vi.mocked(getAffiliateDocuments).mockResolvedValue(eligibleDocuments);
+    vi.mocked(getCommissions).mockResolvedValue([]);
+    vi.mocked(requestPayout).mockResolvedValue({} as never);
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText('Payout currency'), { target: { value: 'USD' } });
+    const submit = await screen.findByRole('button', { name: /request payout of \$27\.00/i });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(requestPayout).toHaveBeenCalledWith({ currency: 'USD' });
+    });
+  });
+
+  it('shows a hint instead of a bare disabled button when nothing is selected in selected mode', async () => {
+    vi.mocked(getAffiliateDocuments).mockResolvedValue(eligibleDocuments);
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText('Payout currency'), { target: { value: 'USD' } });
+    fireEvent.click(await screen.findByLabelText('Selected commissions'));
+
+    const submit = await screen.findByRole('button', { name: /select at least one commission/i });
+    expect(submit).toBeDisabled();
+    expect(requestPayout).not.toHaveBeenCalled();
+  });
+
   it('only offers available commissions for selection and renders no amount input', async () => {
     vi.mocked(getAffiliateDocuments).mockResolvedValue(eligibleDocuments);
     renderPage();
@@ -196,6 +224,6 @@ describe('RequestPayoutPage', () => {
     expect(screen.queryByLabelText('Select commission evt-reversed')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Select commission evt-eur')).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /request payout/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /select at least one commission/i })).toBeDisabled();
   });
 });
