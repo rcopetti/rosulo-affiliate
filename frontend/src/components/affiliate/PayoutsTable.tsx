@@ -40,6 +40,17 @@ const columns: Column<Payout>[] = [
     render: (p) => <PayoutStatusBadge status={p.status} />,
     headerClassName: 'w-36',
   },
+  {
+    key: 'transfer',
+    header: 'Transfer',
+    render: (p) => p.payment_record ? (
+      <span className="space-y-1 text-xs">
+        <span className="block capitalize">{p.payment_record.payment_method.replace(/_/g, ' ')}</span>
+        <span className="block font-mono">{p.payment_record.transfer_reference}</span>
+      </span>
+    ) : <span className="text-fg-subtle">—</span>,
+    headerClassName: 'w-48',
+  },
 ];
 
 export function PayoutsTable({ payouts }: { payouts: Payout[] }) {

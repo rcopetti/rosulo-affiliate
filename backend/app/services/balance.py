@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Commission
+from app.services.commission import mark_available_commissions
 
 ZERO = Decimal("0.00")
 
@@ -44,6 +45,7 @@ def build_balances(rows) -> list[dict]:
 
 
 async def get_balances(db: AsyncSession, affiliate_id: UUID) -> list[dict]:
+    await mark_available_commissions(db, affiliate_id)
     result = await db.execute(
         select(
             Commission.currency,

@@ -243,7 +243,7 @@ class Event(Base):
 class PaymentRecord(Base):
     __tablename__ = "payment_records"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_payment_id = Column(String, nullable=False, index=True)
+    tenant_payment_id = Column(String, nullable=True, index=True)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     customer_id = Column(String, nullable=True)
     amount = Column(Numeric(20, 2), nullable=False)
@@ -251,7 +251,16 @@ class PaymentRecord(Base):
     paid_at = Column(DateTime(timezone=True), default=now_utc)
     sequence_number = Column(Integer, default=1)
     status = Column(String, default="paid")
+    record_type = Column(String, nullable=False, default="incoming_payment")
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=True, unique=True)
+    payment_method = Column(String, nullable=True)
+    transfer_reference = Column(String, nullable=True)
+    recorded_by_tenant_user_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=True
+    )
     created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    payout = relationship("Payout", back_populates="payment_record")
 
 
 class Commission(Base):
@@ -295,6 +304,13 @@ class Payout(Base):
 
     affiliate = relationship("Affiliate", back_populates="payouts", lazy="selectin")
     payout_commissions = relationship("PayoutCommission", back_populates="payout", lazy="selectin")
+    payment_record = relationship("PaymentRecord", back_populates="payout", uselist=False, lazy="selectin")
+    transitions = relationship(
+        "PayoutTransition",
+        back_populates="payout",
+        order_by="PayoutTransition.sequence",
+        lazy="selectin",
+    )
 
 
 class PayoutCommission(Base):
@@ -306,6 +322,22 @@ class PayoutCommission(Base):
 
     payout = relationship("Payout", back_populates="payout_commissions")
     commission = relationship("Commission", back_populates="payout_commissions")
+
+
+class PayoutTransition(Base):
+    __tablename__ = "payout_transitions"
+    __table_args__ = (UniqueConstraint("payout_id", "sequence"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False, index=True)
+    sequence = Column(Integer, nullable=False)
+    from_status = Column(String, nullable=True)
+    to_status = Column(String, nullable=False)
+    actor_tenant_user_id = Column(UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=True)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    payout = relationship("Payout", back_populates="transitions")
+    actor = relationship("TenantUser")
 
 
 class PasswordResetCode(Base):

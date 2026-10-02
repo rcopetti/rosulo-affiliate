@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_tenant
 from app.core.money import normalize_provider_amount
 from app.db.dependencies import get_db
 from app.db.models import Tenant
-from app.services import commission as commission_service
 from app.services import payment_record as payment_service
 
 router = APIRouter()
@@ -27,10 +26,9 @@ async def tenant_webhook(
         int(payload.get("sequence_number", 1)),
         payload.get("status", "paid"),
     )
-    await commission_service.mark_available_commissions(db)
     return {"status": "ok", "payment_record_id": record.tenant_payment_id}
 
 
 @router.post("/paypal")
 async def paypal_webhook(payload: dict):
-    return {"status": "ok"}
+    raise HTTPException(status_code=410, detail="PayPal payout webhooks are disabled")

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdminDashboard } from '@/api/admin/dashboard';
-import { approvePayout, rejectPayout } from '@/api/admin/payouts';
+import { approvePayout, confirmPayoutPayment, rejectPayout } from '@/api/admin/payouts';
+import { PayoutPaymentConfirmation } from '@/api/types';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -48,6 +49,16 @@ export function AdminDashboardPage() {
       toast.add({ title: 'Payout rejected', variant: 'success' });
     },
     onError: () => toast.add({ title: 'Error', description: 'Could not reject payout', variant: 'error' }),
+  });
+
+  const confirm = useMutation({
+    mutationFn: ({ id, details }: { id: string; details: PayoutPaymentConfirmation }) =>
+      confirmPayoutPayment(id, details),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      toast.add({ title: 'Payment recorded', variant: 'success' });
+    },
+    onError: () => toast.add({ title: 'Error', description: 'Could not record payment', variant: 'error' }),
   });
 
   if (isLoading || !data)
@@ -99,6 +110,7 @@ export function AdminDashboardPage() {
             payouts={data.payout_queue}
             onApprove={(id) => approve.mutate(id)}
             onReject={(id) => reject.mutate(id)}
+            onConfirmPayment={(id, details) => confirm.mutate({ id, details })}
           />
         </Card>
       </div>

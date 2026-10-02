@@ -1,7 +1,8 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
+from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import is_supported_currency, quantize_ledger_amount
@@ -10,7 +11,8 @@ from app.db.models import (
     AffiliateAccount,
     Commission,
     Event,
-    PaymentRecord,
+    Payout,
+    PayoutCommission,
     Term,
 )
 from app.services.contract import get_contract_for_affiliate
@@ -89,7 +91,7 @@ async def calculate_from_sale_event(
         net_amount=net,
         currency=event.currency,
         status="pending",
-        available_on=event.good_date,
+        available_on=(event.good_date or today) + timedelta(days=14),
     )
     db.add(commission)
     await db.commit()
@@ -97,24 +99,26 @@ async def calculate_from_sale_event(
     return commission
 
 
-async def mark_available_commissions(db: AsyncSession):
-    result = await db.execute(
-        select(Commission).where(
+async def mark_available_commissions(db: AsyncSession, affiliate_id: UUID):
+    active_reservation = (
+        select(PayoutCommission.id)
+        .join(Payout, Payout.id == PayoutCommission.payout_id)
+        .where(
+            PayoutCommission.commission_id == Commission.id,
+            Payout.status.in_(("pending_approval", "approved")),
+        )
+        .exists()
+    )
+    await db.execute(
+        update(Commission)
+        .where(
+            Commission.affiliate_id == affiliate_id,
             Commission.status == "pending",
             Commission.available_on <= date.today(),
+            ~active_reservation,
         )
+        .values(status="available")
     )
-    for commission in result.scalars().all():
-        event = await db.get(Event, commission.event_id)
-        if event and event.payment_record_id:
-            pr = await db.execute(
-                select(PaymentRecord).where(
-                    PaymentRecord.tenant_payment_id == event.payment_record_id,
-                    PaymentRecord.status == "paid",
-                )
-            )
-            if pr.scalar_one_or_none():
-                commission.status = "available"
     await db.commit()
 
 

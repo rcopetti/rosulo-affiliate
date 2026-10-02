@@ -117,6 +117,32 @@ export interface Commission {
   available_on?: string;
 }
 
+export interface PayoutPaymentConfirmation {
+  payment_method: string;
+  transfer_reference: string;
+}
+
+export interface PayoutPaymentRecord {
+  id: string;
+  payout_id: string;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  transfer_reference: string;
+  paid_at: string;
+  recorded_by_tenant_user_id: string;
+}
+
+export interface PayoutTransition {
+  id: string;
+  sequence: number;
+  from_status: string | null;
+  to_status: string;
+  actor_tenant_user_id: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
 export interface Payout {
   id: string;
   affiliate_id: string;
@@ -131,6 +157,8 @@ export interface Payout {
   approved_at?: string;
   paid_at?: string;
   paypal_batch_id?: string;
+  payment_record?: PayoutPaymentRecord | null;
+  transitions?: PayoutTransition[];
   commissions?: Commission[];
 }
 
