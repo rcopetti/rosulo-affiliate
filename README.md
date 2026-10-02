@@ -4,8 +4,9 @@ Multi-tenant affiliate tracking and payout platform. Built to power the allbum.m
 
 This repository contains both the FastAPI backend and the React frontend in a single branch.
 
-- **Backend:** `backend/` — FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic, SQS, PayPal.
+- **Backend:** `backend/` — FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic, AWS SES, and a scheduled ECS/Fargate maintenance job.
 - **Frontend:** `frontend/` — Vite, React, TypeScript, Tailwind CSS, TanStack Query, Zustand.
+- **Settlement:** Affiliates request whole available commission records; merchants pay manually through PayPal and record the completed transfer. Rosulo does not send payout funds.
 
 ---
 
@@ -39,7 +40,7 @@ This repository contains both the FastAPI backend and the React frontend in a si
 - `uv` (Python package manager and runtime)
 - Node.js 20+ and npm
 - Docker and Docker Compose (for the local PostgreSQL container)
-- PayPal Payouts API sandbox or live credentials (for payout execution)
+- A merchant PayPal account for the merchant to make external manual transfers (Rosulo does not require PayPal API credentials)
 
 ---
 
@@ -66,7 +67,7 @@ uv pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Edit `.env` if you need to change the database URL, PayPal credentials, or JWT secret.
+Edit `.env` if you need to change the database URL, email settings, or JWT secret. Sale events are sent only after merchant payment confirmation and must include the merchant-defined `good_date` plus the external `payment_record_id`; Rosulo uses `good_date` directly as the commission due date.
 
 Apply the Alembic migrations:
 
@@ -143,9 +144,7 @@ npx playwright test
 | `DATABASE_URL` | PostgreSQL connection string |
 | `TEST_DATABASE_URL` | Optional test DB used by pytest; defaults to `<DATABASE_URL database>_test` |
 | `SECRET_KEY` | JWT and token signing key |
-| `PAYPAL_CLIENT_ID` | PayPal Payouts API client ID |
-| `PAYPAL_CLIENT_SECRET` | PayPal Payouts API secret |
-| `SQS_QUEUE_URL` | Amazon SQS queue URL for background jobs |
+| `SQS_QUEUE_URL` | Legacy queue used only to safely drain obsolete payout messages; manual payout confirmation does not dispatch transfers |
 | `EMAIL_BACKEND` | `console` (logs) or `ses` (AWS SES) |
 | `EMAIL_FROM` | Sender address (must be verified in SES) |
 | `SES_REGION` | AWS SES region (default `us-east-1`) |
@@ -173,6 +172,8 @@ docker push <image>   # push the tags printed by the build script
 ./run-migration.sh <tag>      # one-shot Fargate task: alembic upgrade head
 ./deploy-apprunner.sh <tag>   # roll out to the Rosulo-Affiliates App Runner service
 ```
+
+Commission maturity runs in a separate ECS/Fargate task started by EventBridge Scheduler at 00:15 UTC daily. The CloudFormation definition is `backend/deployment/payout-maintenance.yaml`; deploy and verify it in the target AWS environment with the current application image, SSM database parameter, task roles, and network settings. The job follows the merchant-provided sale `good_date`; Rosulo does not add a 14-day hold or send affiliate payouts through PayPal.
 
 To run the full stack locally in Docker (Postgres + one-shot migration + API):
 

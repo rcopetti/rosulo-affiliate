@@ -1,17 +1,17 @@
 # Rosulo Affiliate Service — Service Definition
 
-**Version:** 0.10  
-**Date:** 2026-09-09  
-**Status:** Draft — updated for tenant users and affiliate invitations  
+**Version:** 0.11
+**Date:** 2026-10-01
+**Status:** Draft — aligned to commission-backed manual payouts
 **Audience:** Engineering, Product, allbum.me integration team, future SaaS customers
 
 ---
 
 ## 1. Purpose
 
-The Rosulo Affiliate Service is a multi-tenant affiliate tracking and payout platform. It is built to power the allbum.me affiliate program and, later, to be sold as a standalone SaaS product to third-party merchants.
+The Rosulo Affiliate Service is a multi-tenant affiliate tracking and commission platform. It is built to power the allbum.me affiliate program and, later, to be sold as a standalone SaaS product to third-party merchants.
 
-The service tracks campaign-driven click, lead, and sale events; computes affiliate commissions according to the affiliate's contract terms; and orchestrates approved payouts to affiliates.
+The service tracks campaign-driven click, lead, and merchant-confirmed sale events; computes affiliate commissions according to contract terms; makes commissions payable on the merchant-provided `good_date`; and records merchant-approved, manually completed PayPal payouts. Rosulo does not initiate or hold payout funds.
 
 ---
 
@@ -19,26 +19,29 @@ The service tracks campaign-driven click, lead, and sale events; computes affili
 
 - Multi-tenant merchant (tenant) onboarding and data isolation.
 - Tenant user accounts (email/password login) that can manage one tenant account.
-- API key management per tenant for server-to-server integrations (events and webhooks).
+- API key management per tenant for server-to-server event ingestion.
 - Affiliate accounts are created only by accepting a tenant invitation; a global account can be linked to multiple tenants over time.
 - Per-tenant affiliate record with its own contract, campaigns, commissions, and payouts.
 - Affiliate approval workflow, including a hard gate before the first payout.
 - One contract per affiliate, managed by the tenant, defining commission terms by payment sequence.
 - Campaign and tracking-code creation and management by the affiliate.
-- Ingestion of three primary event types: `click`, `lead`, and `sale`.
-- Contract terms that define commission percentages against specific payment sequences (1st, 2nd, 3rd, etc.).
-- "Good date" handling for sale events and payment-record association.
-- Commission ledger: earned, pending, available, and paid balances, including tax retention.
-- Payout request, approval, and execution via PayPal.
-- Affiliate dashboard with lead volume and sales grouping by sequence.
-- Tenant and admin dashboards for campaign, affiliate, and payout management.
+- Ingestion of `click`, `lead`, and `sale` events. A sale event is sent after the merchant confirms customer payment and must include `good_date`.
+- Commission ledger states: `pending`, `available`, `reserved`, `paid`, and `reversed`, with currency-scoped amounts and tax retention.
+- Daily promotion of pending commissions when the merchant-defined `good_date` is due.
+- Affiliate payout requests for all available commissions or selected whole commission records in one currency; the server derives all amounts.
+- Merchant review of the itemized commission batch, approval/rejection, and manual PayPal payment recording.
+- Payout history, paid payout totals, and affiliate email notification with a payout detail link.
+- Affiliate, tenant, and admin dashboards for campaign, commission, and payout management.
 - Public API for event ingestion and data retrieval.
 - Responsive web application for desktop and mobile.
 
 ## 3. Out of Scope (v1)
 
 - Native iOS/Android mobile applications.
-- Payment rails other than PayPal for payouts.
+- PayPal API payout dispatch, PayPal payout webhooks, or any automated payout rail.
+- Payment rails other than manual PayPal for affiliate settlement.
+- Incoming customer payment-record ingestion/storage as a prerequisite for sale-event commission creation.
+- Refund/chargeback event handling and commission reversal implementation; future refund events retain the external sale `payment_record_id` for correlation.
 - Advanced attribution models beyond last-click / UTM campaign code.
 - Built-in tax reporting or tax form generation.
 - Automatic tax filing with government authorities.
@@ -56,7 +59,7 @@ The service tracks campaign-driven click, lead, and sale events; computes affili
 | **Affiliate / Partner** | A person or business invited by a tenant to promote its products. Creates a global account when accepting an invitation, and can later be invited by other tenants. Creates campaigns and requests payouts within the selected tenant. |
 | **Platform Admin** | Rosulo operations staff who manage tenants, global settings, and compliance. |
 | **End Customer** | The customer who clicks a campaign, registers, or pays. Not a direct user of the service. |
-| **PayPal** | The payment rail used to move funds from the tenant to the affiliate. |
+| **PayPal** | External payment service used by the merchant outside Rosulo to transfer funds to the affiliate; Rosulo records the merchant-confirmed payment. |
 
 ---
 
@@ -68,8 +71,8 @@ The service tracks campaign-driven click, lead, and sale events; computes affili
 2. **Affiliate Management** — profiles, KYC documents, tax info, approval status, payout instructions.
 3. **Campaign & Tracking** — campaign codes, links, event ingestion, attribution.
 4. **Contracts & Terms** — per-affiliate commission rules bound to payment sequences.
-5. **Sales & Commissions** — sale event processing, tax retention, and commission ledger.
-6. **Payouts** — request, approval, batch creation, payment rail execution, reconciliation.
+5. **Sales & Commissions** — merchant-confirmed sale event processing, tax retention, due-date maturity, and commission ledger.
+6. **Payouts** — whole-commission request selection, merchant review, manual PayPal payment recording, reconciliation, and reporting.
 7. **Reporting & Dashboard** — aggregations for affiliates and tenants.
 
 ### 5.2 Core Entities
@@ -91,7 +94,7 @@ Tenant
 │   └── expires_at
 ├── Affiliate[]
 ├── Event[]
-├── PaymentRecord[]
+├── Commission[]
 └── Payout[]
 
 TenantUser
@@ -143,7 +146,7 @@ AffiliateAccount (created when an affiliate accepts an invitation)
     └── Payout[]
 
 Event
-├── type: click | lead | sale
+├── type: click | lead | sale | (future) refund
 ├── tenant_id
 ├── campaign_id
 ├── affiliate_id
@@ -151,20 +154,11 @@ Event
 ├── amount
 ├── currency
 ├── payment_sequence
-├── good_date
-├── payment_record_id
+├── good_date (required for sale; merchant-defined due date)
+├── payment_record_id (required external merchant identifier on sale)
 ├── referer
 ├── page_url
 └── occurred_at
-
-PaymentRecord
-├── tenant_payment_id
-├── customer_id
-├── amount
-├── currency
-├── paid_at
-├── sequence_number
-└── status: paid | refunded | charged_back
 
 Commission
 ├── event_id
@@ -174,24 +168,30 @@ Commission
 ├── withholding_amount
 ├── net_amount
 ├── currency
-├── status: pending | available | paid | reversed
-└── available_on
+├── status: pending | available | reserved | paid | reversed
+└── available_at (good_date at 00:00 UTC)
 
 Payout
 ├── affiliate_id
-├── campaign_filter (optional for reporting only; payout is cross-campaign)
-├── requested_amount
-├── approved_amount (gross commissions approved for payment)
+├── commission_ids (whole commission rows; one currency)
+├── requested_amount (derived gross total)
+├── approved_amount (derived gross total approved for payment)
 ├── withholding_total
-├── paypal_fees
 ├── net_paid
 ├── currency
-├── commissions[]
-├── paypal_batch_id
-├── status: requested | pending_approval | approved | processing | paid | failed | rejected
+├── status: pending_approval | approved | rejected | paid
 ├── requested_at
 ├── approved_at
 └── paid_at
+
+PayoutPayment
+├── payout_id (unique)
+├── amount
+├── currency
+├── payment_method: paypal
+├── transfer_reference
+├── paid_at (merchant-entered actual payment datetime)
+└── recorded_by_tenant_user_id
 ```
 
 ---
@@ -204,7 +204,7 @@ The service ingests three primary event types from the tenant or from the allbum
 |------------|---------|-------------|
 | `click` | A customer clicks or opens a campaign link, or the campaign code is computed on a page. | `campaign_id`, `customer_id`, `referer` (source page), `page_url` (page where the click was computed), `user_agent`, `ip_address`, `occurred_at` |
 | `lead` | A customer registers or signs up and is attributed to a campaign. | `campaign_id`, `customer_id`, `customer_email`, `occurred_at` |
-| `sale` | A customer pays the tenant. | `campaign_id`, `customer_id`, `amount`, `currency`, `payment_record_id`, `payment_sequence`, `good_date`, `occurred_at` |
+| `sale` | The merchant sends an event after its system confirms the customer payment. | `campaign_id`, `customer_id`, `amount`, `currency`, required external `payment_record_id`, `payment_sequence`, required `good_date`, `occurred_at` |
 
 ### 6.1 Click Referer
 
@@ -256,33 +256,32 @@ A refund or chargeback creates a reversal event. The system generates a negative
 
 ---
 
-## 8. Payment Records and "Good Date"
+## 8. Sale Confirmation, Good Date, and Commission Availability
 
-### 8.1 PaymentRecord
+### 8.1 Sale Event as Payment Confirmation
 
-A `PaymentRecord` is the authoritative proof of a customer payment in the tenant's system (e.g. allbum.me charge record or PSP record).
+The merchant sends a `sale` event only after its own system confirms the customer payment. Every sale event must include a nonblank merchant external `payment_record_id`; Rosulo stores that identifier only on the event for traceability and future refund-to-sale correlation. Rosulo does not require or persist a separate incoming customer `PaymentRecord` to create or mature a commission.
 
-- `payment_record_id` — unique identifier from the merchant.
-- `amount` and `currency`.
-- `paid_at` — the moment the money changed hands.
-- `sequence_number` — the 1st, 2nd, 3rd, etc. payment for that customer.
-- `status` — `paid`, `refunded`, `charged_back`.
+A future `refund` event must refer to the original sale's external `payment_record_id`. Refund ingestion and reversal behavior are not part of this version.
 
-### 8.2 Good Date
+### 8.2 Merchant-Defined Good Date
 
-The `good_date` on a sale event represents when the commission becomes available for payout. This is not necessarily the same as `paid_at`. For example, on allbum.me the `good_date` may be the event date on which the sale settles.
+`good_date` is required on every sale event. It is the due date selected by the merchant. Rosulo uses it directly and does not add another 14-day hold. Because the event field is date-only, Rosulo interprets `good_date` as 00:00 UTC and derives the commission's `available_at` timestamp from it.
+
+A daily UTC process promotes commissions from `pending` to `available` when `available_at <= now_utc`. The process is idempotent, independent of affiliate page visits, and catches up after missed runs. A missing `good_date` is a sale validation error; the service must not substitute the current date.
 
 ### 8.3 Balance States
 
 | State | Definition |
 |-------|------------|
-| **Earned** | Commission calculated from a tracked sale event. |
-| **Pending** | Commission with a `good_date` in the future. |
-| **Available** | Commission with a `good_date` on or before today and a matching `PaymentRecord`. |
-| **Paid** | Commission included in a completed Payout. |
-| **Coming Revenue** | Sale event with a `good_date` but no `payment_record_id` yet. |
+| **Earned** | Commission calculated from a merchant-confirmed sale event; reported separately from payout payments. |
+| **Pending** | Commission with an `available_at` later than the current time. |
+| **Available** | Commission whose due instant has passed and which is not reserved by an active payout. |
+| **Reserved** | Commission associated with a payout in `pending_approval` or `approved` state. |
+| **Paid** | Commission included in a payout with a completed merchant-confirmed payment. |
+| **Reversed** | Existing ledger state for a reversal; refund event ingestion/reversal implementation remains deferred. |
 
-A sale with a `good_date` but no `payment_record_id` is treated as **coming revenue** and is not included in the affiliate's available balance until the matching `PaymentRecord` arrives.
+A payout rejection returns its reserved commissions to `available` while retaining historical payout associations. An approved payout keeps commissions reserved until the merchant records the completed PayPal payment.
 
 ---
 
@@ -355,7 +354,7 @@ A payout record stores:
 - `paypal_fees` — PayPal transaction fees, if borne by the affiliate.
 - `net_paid` — amount sent to the affiliate (`gross_commissions` − `withholding_total` − `paypal_fees`).
 
-Only the `net_paid` amount is transferred via PayPal. The `withholding_total` is tracked for later remittance and reporting.
+The merchant manually transfers the `net_paid` amount via PayPal outside Rosulo; the `withholding_total` is tracked separately. Rosulo records the merchant-entered payment datetime and PayPal reference but does not call PayPal.
 
 Note: The service computes and tracks withholding values. Actual remittance to tax authorities and generation of official tax documents is outside the scope of v1.
 
@@ -382,29 +381,33 @@ Before an affiliate can request or receive a payout from a tenant, the affiliate
 
 ## 11. Payouts
 
-### 11.1 Payout Request
+### 11.1 Affiliate Request
 
-1. The affiliate views their available balance (cross-campaign) and submits a payout request.
-2. The service calculates the gross commission, applies the applicable withholding, and creates a `Payout` in status `requested`.
-3. The payout remains in `pending_approval` until the tenant approves it.
+1. The affiliate views available commissions and chooses either all available commission rows of one currency or a selected group of whole commission IDs.
+2. The client does not submit an amount. Rosulo validates ownership, currency, status, and payout eligibility, then derives gross, withholding, and net totals from the selected ledger rows.
+3. In one transaction, the service creates a `Payout` in `pending_approval`, links every selected commission, changes them from `available` to `reserved`, and records the initial transition.
+4. A commission may belong to at most one active payout. A rejected payout retains its commission links for audit and returns its commissions to `available` for a later request.
 
-### 11.2 Payout Approval
+### 11.2 Merchant Review and Approval
 
-- A tenant admin reviews the requested payout. The platform (Rosulo) does not participate in payout approval decisions; this remains the tenant's business.
-- On approval, the payout moves to `approved`, then `processing` while the PayPal batch is created.
-- On rejection, the payout moves to `rejected` and the commission becomes available again.
+- A tenant user reviews the full commission batch, including every commission record, gross/withholding/net totals, count, and source sale date range.
+- The tenant user may approve or reject a `pending_approval` payout. Only the tenant's authorized user may take the action.
+- Approval changes the payout to `approved`; commissions remain `reserved`. No PayPal API call or payout queue message is triggered.
+- Rejection changes the payout to `rejected` and releases all linked commissions to `available` atomically. Historical associations and status transitions remain visible.
 
-### 11.3 PayPal Execution
+### 11.3 Manual PayPal Payment
 
-- The service uses the PayPal Payouts API to send funds from the tenant's PayPal account to the affiliate's PayPal email.
-- Only the `net_paid` amount is transferred; the `withholding_total` is tracked separately.
-- Each payout item is logged with the PayPal batch id, item id, status, amount, currency, and fees.
-- Payouts are idempotent; the same request cannot be approved and paid twice.
+- The merchant performs the transfer outside Rosulo. The payment modal shows the affiliate name, contact email, PayPal recipient identifier, payout amount/currency, and commission count.
+- After the transfer, the merchant records the actual payment datetime and PayPal transaction ID/reference. Amount and currency are derived from the approved payout.
+- Successful confirmation creates one `PayoutPayment` and atomically marks the payout and its reserved commissions `paid`. A duplicate identical confirmation is idempotent; conflicting details are rejected.
+- `PayoutPayment` stores the payout, amount, currency, `paypal` method, transfer reference, actual `paid_at`, and confirming tenant user. Legacy payout-linked payment records are migrated without loss.
+- The affiliate receives a transactional email with a link to the authenticated payout detail after the payment commits. Email failure does not undo payment and must be retryable/observable.
 
-### 11.4 Reconciliation
+### 11.4 Payout History and Reporting
 
-- On PayPal success, commissions transition from `available` to `paid` and the payout status becomes `paid`.
-- On failure, the payout status becomes `failed` and the commissions remain `available` for the next request.
+- Affiliates can inspect payout status, linked commissions, and payment details from payout history/detail.
+- Merchants can inspect an affiliate's payout history and paid payout totals for rolling 12 months and calendar YTD, grouped by payout payment date and currency.
+- Reports never combine currencies. Paid payout totals are separate from earned commission totals.
 
 ---
 
@@ -416,7 +419,7 @@ Before an affiliate can request or receive a payout from a tenant, the affiliate
 - **Payments by sequence** — 1st, 2nd, 3rd, etc. payments with associated commissions.
 - **Campaign filter** — view data for one campaign or all campaigns.
 - **Balance summary** — earned, pending, available, paid, tax retained, and any debt from reversals.
-- **Payout history** — requested, approved, and paid payouts with PayPal transaction details.
+- **Payout history** — requested, approved, rejected, and paid payouts; payout detail shows included commissions and recorded PayPal payment details.
 - **Document status** — KYC forms and approval state.
 
 ### 12.2 Tenant Dashboard
@@ -424,14 +427,14 @@ Before an affiliate can request or receive a payout from a tenant, the affiliate
 - Campaign performance (clicks, leads, conversion rate).
 - Affiliate list and approval status.
 - Commission liability by period, including tax retention totals.
-- Payout request queue and approval workflow.
-- Payout batch history.
+- Payout request queue with complete commission detail and approval/rejection workflow.
+- Per-affiliate payout history and paid payout totals for rolling 12 months and calendar YTD, separated by currency.
 - Event stream and audit log.
 
 ### 12.3 Admin Dashboard
 
 - Tenant provisioning, status, and billing.
-- Global settings, supported currencies, and PayPal rail configuration.
+- Global settings, supported currencies, and payout workflow support tools.
 - Support tools to inspect events, commissions, and payouts.
 
 ---
@@ -478,7 +481,7 @@ All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped aut
   - If an `AffiliateAccount` already exists for the email: the invite is an association invite; on acceptance a new `Affiliate` record links the existing account to the tenant.
   - The platform sends an email with a tokenized invite link; the actual email dispatch may be a logging stub in v1.
 - `GET /v1/admin/affiliates` — list accepted affiliates and pending invites for a tenant.
-- `GET /v1/admin/affiliates/:id` — get affiliate profile.
+- `GET /v1/admin/affiliates/:id` — get affiliate profile, payout history, and paid payout totals for rolling 12 months and calendar YTD by currency.
 - `PATCH /v1/admin/affiliates/:id` — update affiliate.
 - `POST /v1/admin/affiliates/:id/documents/approve` — approve a business form.
 - `POST /v1/admin/affiliates/:id/approve` — approve KYC for payouts.
@@ -494,9 +497,10 @@ All endpoints are prefixed with `/v1` and require role-scoped, tenant-scoped aut
 ### Admin — Payouts
 
 - `GET /v1/admin/payouts` — list payout requests for a tenant.
-- `GET /v1/admin/payouts/:id`
-- `POST /v1/admin/payouts/:id/approve` — approve and trigger PayPal (tenant admin only).
-- `POST /v1/admin/payouts/:id/reject` — reject a payout request (tenant admin only).
+- `GET /v1/admin/payouts/:id` — return payout totals, transition history, affiliate payment identity, and every linked commission/source sale.
+- `POST /v1/admin/payouts/:id/approve` — approve a pending payout; this does not dispatch a PayPal transfer.
+- `POST /v1/admin/payouts/:id/reject` — reject a pending payout and release its commissions (tenant-authorized user only).
+- `POST /v1/admin/payouts/:id/confirm-payment` — record merchant-completed PayPal payment using `paid_at` and `transfer_reference`; amount/currency are derived from the payout.
 
 ### Affiliate — Self-Service
 
@@ -517,13 +521,14 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 
 - `GET /v1/affiliate/balance`
 - `GET /v1/affiliate/commissions`
-- `POST /v1/affiliate/payout-requests` — request a payout from the selected tenant.
+- `POST /v1/affiliate/payout-requests` — request a payout using `currency` and optional whole `commission_ids`; omission selects all available rows in that currency, and the server derives the amount.
 - `GET /v1/affiliate/payouts` — list own payouts from the selected tenant.
+- `GET /v1/affiliate/payouts/:id` — view own payout commissions, status, and payment details.
 
-### Webhooks
+### Webhooks and Events
 
-- `POST /v1/webhooks/paypal` — PayPal IPN/Payouts webhook.
-- `POST /v1/webhooks/tenant` — tenant push for payment records.
+- `POST /v1/events` — tenant sends a sale event after customer payment confirmation; each sale requires merchant-defined `good_date` and external `payment_record_id` for future refund correlation.
+- PayPal payout webhooks and incoming customer payment-record webhooks are not part of the manual payout product.
 
 ### Dashboard Aggregations
 
@@ -536,7 +541,7 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 
 - Each tenant has its own isolated dataset, identified by `tenant_id` on every entity.
 - SaaS pricing is out of scope for this service definition and will be defined separately.
-- Tenant-level configuration includes: supported currencies, required KYC documents, default withholding rates, backup withholding rules, country/status-specific withholding overrides, commission rounding rules, and PayPal credentials.
+- Tenant-level configuration includes: supported currencies, required KYC documents, default withholding rates, backup withholding rules, country/status-specific withholding overrides, and commission rounding rules. Affiliate PayPal recipient details are provided to the merchant for manual transfer; Rosulo does not store merchant PayPal API credentials.
 - 3rd-party tenants use the same API and web application; allbum.me is the first tenant.
 
 ---
@@ -561,7 +566,7 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 - **Deployment:** AWS App Runner.
 - **API:** REST with JSON; OpenAPI specification generated from FastAPI.
 - **Database:** relational (PostgreSQL) for transactional data, with optional OLAP/clickhouse for dashboard aggregations.
-- **Queue:** Amazon SQS for background jobs such as payout execution and event processing.
+- **Scheduled work:** EventBridge Scheduler launches a one-shot ECS/Fargate maintenance task daily at 00:15 UTC to mature due commissions and recover pending payout notices. The task is independent of App Runner API replicas. Do not use SQS/PayPal payout dispatch for manual settlement.
 - **Frontend:** responsive web application (desktop and mobile).
 
 ### 16.2 Key Invariants
@@ -569,13 +574,13 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 1. An affiliate account can be linked to many tenants; it has exactly one active per-tenant record per tenant.
 2. An affiliate has exactly one active contract per tenant.
 3. Affiliates create campaigns; commissions are calculated using the affiliate's contract regardless of which campaign generated the event.
-4. Payouts aggregate commissions across all campaigns for an affiliate within one tenant.
-5. An affiliate cannot request or receive a payout from a tenant if that tenant's per-tenant KYC is not approved.
-5. A commission is not marked `available` before its `good_date`.
-6. A commission is not marked `available` without a matching `PaymentRecord`.
-7. A payment sequence not covered by the affiliate's contract does not generate a commission.
-8. Events are idempotent; duplicate ingestion does not create duplicate commissions.
-9. Payouts are idempotent; a payout request cannot be approved and paid twice.
+4. Payouts aggregate commissions across campaigns for an affiliate within one tenant, but include only the whole commission rows selected by the affiliate.
+5. An affiliate cannot request or receive a payout from a tenant if that tenant's per-tenant payout eligibility is not approved.
+6. A payable sale event requires merchant-provided `good_date`; it is the due date and is interpreted as 00:00 UTC.
+7. Only the daily maturity process transitions due commissions from `pending` to `available`; no incoming `PaymentRecord` is required.
+8. A commission may be in at most one active payout; rejection releases it but preserves historical association.
+9. A payout can become `paid` only after a merchant confirms external PayPal payment and one `PayoutPayment` is committed with it.
+10. Events and payout/payment mutations are idempotent and tenant-scoped; currency totals never mix currencies.
 
 ---
 
@@ -583,14 +588,13 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 
 | # | Question | Impact | Default / Recommendation |
 |---|----------|--------|--------------------------|
-| 1 | Should commission be calculated on gross or net amount (after refunds/fees)? | Revenue recognition and payout amounts. | Default to gross; fees handled by tenant separately. |
-| 2 | How is payment sequence number determined when multiple payment records exist for one customer? | Commission attribution. | Sequence is ordinal by `paid_at` per customer. |
-| 3 | What are the exact default withholding rules by affiliate status, and how are treaties / backup withholding handled? | Tax computation and payout net amount. | US persons: 0% unless backup withholding (24%). Non-US persons: 30% NRA unless treaty/ECI. Treaties require approved W-8BEN and admin override. |
-| 4 | Are payouts automatic on a schedule or manually initiated? | Cash flow and operations. | v1: affiliate requests, tenant approves. |
-| 5 | Who pays PayPal transaction fees — tenant or affiliate? | Payout net amount. | Tenant pays fees (affiliate receives the net commission amount). |
-| 6 | What is the minimum payout threshold? | Support and transaction cost. | Configurable per tenant; default $50. |
-| 7 | How are multi-currency sale events handled? | FX, rounding, payout currency. | v1: store event currency; payout in affiliate's configured currency at payout-time rate. |
-| 8 | Who approves payout requests? | Operations and liability. | Tenant admin only. The platform does not participate in payout approval decisions. |
+| 1 | What commission base and fee treatment apply to each contract? | Commission and payout net amounts. | Preserve existing contract/tax calculations; no new fee allocation is introduced by this payout change. |
+| 2 | How is payment sequence number determined for repeated customer payments? | Commission attribution. | Resolve in the event/attribution contract; future refund events use the original sale's external `payment_record_id`. |
+| 3 | What are the exact default withholding rules by affiliate status, and how are treaties / backup withholding handled? | Tax computation and payout net amount. | Existing tax scope remains subject to qualified tax/accounting review; this payout design does not validate tax law. |
+| 4 | Which scheduler runtime, timeout, and alert channel will run daily commission maturity? | Due commissions may remain pending if scheduling fails. | EventBridge Scheduler runs the ECS/Fargate maintenance task at 00:15 UTC; the job has a 10-minute deadline, CloudWatch task logs, and idempotent catch-up. Verify in non-production before launch. |
+| 5 | What retention/archive policy applies to any historical incoming `PaymentRecord` rows before the old table is removed? | Data preservation and migration safety. | Preserve/export existing rows or fail closed; never silently discard them. |
+| 6 | Which durable retry mechanism will deliver paid-payout email notices? | Affiliate may not receive payment confirmation. | Persist `PayoutNotification` with payment, attempt email after commit, expose pending/sending/sent/failed status and merchant retry, and recover pending/expired leases in daily maintenance; use 5-second connect/15-second read timeouts. |
+| 7 | Does v1 require a minimum payout threshold? | Affiliate request eligibility. | No minimum threshold is introduced by this design; requests contain all or selected available whole commissions, not a user-entered amount. |
 
 ---
 
@@ -604,9 +608,9 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 6. The service calculates commissions from the affiliate's contract, not per campaign.
 7. The service applies the correct withholding rate for each affiliate (US person 0% or 24% backup withholding; non-US person 30% or treaty rate) and records gross, withholding, and net amounts.
 8. The service calculates commissions only for payment sequences covered by a term.
-9. A sale event with a `good_date` and no `payment_record_id` is not available for payout.
-10. An affiliate cannot request a payout until KYC documents are approved.
-11. An affiliate can request a payout; a tenant can approve it and trigger PayPal payment.
+9. A sale event is sent after merchant payment confirmation and requires `good_date` plus the external `payment_record_id`; commissions become available on a daily UTC run at or after the merchant-defined due instant.
+10. An affiliate cannot request a payout until per-tenant payout eligibility is approved.
+11. An affiliate requests all or selected available whole commissions; the tenant reviews the itemized batch and manually pays by PayPal, then records actual payment time and reference.
 12. The affiliate dashboard shows lead volume by day/hour and sales grouped by sequence, with optional campaign filter.
 13. The tenant dashboard shows campaign performance, affiliate status, commission liability, and payout request queue.
 14. An affiliate can log in, list linked merchants, select a merchant, and interact with each merchant's data using `X-Tenant-Id`.
@@ -619,9 +623,9 @@ All endpoints below require the `X-Tenant-Id` header to select the active mercha
 |------|------------|
 | **Clicks** | Customer interactions with a campaign, e.g. clicks or impressions. |
 | **Leads** | Customer registrations or sign-ups attributed to a campaign. |
-| **Sales** | Completed customer purchases attributed to a campaign, confirmed by the payment record. |
-| **Good Date** | The date on which a commission becomes eligible for payout. |
-| **Coming Revenue** | A tracked sale that is expected but not yet confirmed by a payment record. |
+| **Sales** | Customer purchases attributed to a campaign after the merchant confirms payment and sends a sale event. |
+| **Good Date** | Merchant-provided due date for commission availability; interpreted as 00:00 UTC on that date. |
+| **PayoutPayment** | Immutable record of a merchant-confirmed external PayPal transfer for one affiliate payout. |
 | **Term** | A rule that maps a payment sequence to a commission percentage. |
 | **Contract** | The set of terms that belong to one affiliate. |
 | **Affiliate Account** | The global identity (login, profile, documents, tax info) created when an affiliate accepts a tenant invitation. It can be linked to multiple tenants over time. |

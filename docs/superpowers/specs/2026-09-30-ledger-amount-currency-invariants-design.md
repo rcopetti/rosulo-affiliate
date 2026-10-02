@@ -4,6 +4,8 @@
 
 **Status:** Implemented; data-conversion verification waived by owner
 
+> **Historical scope note (2026-10-01):** The currency and amount invariants below remain applicable. The sale-event validation contract, availability-date policy, and PaymentRecord model responsibilities are superseded by `docs/superpowers/specs/2026-10-01-commission-backed-manual-payouts-design.md`: every sale requires merchant `good_date` and external `payment_record_id`; `good_date` is the due date (UTC start of day); outgoing settlement uses `PayoutPayment`; incoming payment-record ingestion is retired.
+
 ## Goal
 
 Make event, commission, payment-record, payout, and balance amounts deterministic and currency-scoped, while preserving the existing numeric JSON contract for supported clients.

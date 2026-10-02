@@ -1,5 +1,7 @@
 # Rosulo Affiliate v1 Implementation Plan
 
+> **Historical note (2026-10-01):** This original v1 plan's payout and incoming-payment sections are superseded by `docs/superpowers/specs/2026-10-01-commission-backed-manual-payouts-design.md` and the active next-phase plan. Do not implement the incoming `PaymentRecord` gate, PayPal API credentials/automatic payout execution, or the original 14-day hold from this historical plan. Current sale events require merchant `good_date` and external `payment_record_id`; follow the current service definition for all other contract changes. Other sections remain historical context and must be reconciled against the current service definition before execution.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a FastAPI-based backend for the Rosulo Affiliate Service v1, including tenant/auth, click/lead/sale tracking, contract terms, commission calculation, tax withholding, payout request/approval, and PayPal execution.

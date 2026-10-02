@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.12, FastAPI, Pydantic 2, SQLAlchemy 2, Alembic, PostgreSQL, pytest, React, TypeScript, Vitest.
 
+> **Historical scope note (2026-10-01):** The completed currency/precision work remains applicable. The sale-event validation contract, availability-date policy, and PaymentRecord roles described in this historical plan are superseded by `docs/superpowers/specs/2026-10-01-commission-backed-manual-payouts-design.md`: every sale requires merchant `good_date` and external `payment_record_id`; `good_date` is the due date (UTC start of day); outgoing settlement uses `PayoutPayment`; and incoming payment-record ingestion is retired.
+
 ---
 
 ## File Map
