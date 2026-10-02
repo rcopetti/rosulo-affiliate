@@ -29,6 +29,7 @@ export function KycUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const requiredType = requiredDocumentType || 'W-9';
+  const hasSubmittedRequired = documents.some((d) => d.document_type === requiredType);
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -104,7 +105,7 @@ export function KycUploader({
       )}
       <input ref={inputRef} type="file" className="hidden" accept=".pdf,image/jpeg,image/png,image/webp" aria-label={`Upload ${requiredType}`} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       <Button onClick={() => inputRef.current?.click()} isLoading={loading} disabled={isLoading || !requiredDocumentType}>
-        Replace {requiredType}
+        {hasSubmittedRequired ? `Replace ${requiredType}` : `Submit ${requiredType}`}
       </Button>
       {previewUrl && (
         <div className="overflow-hidden rounded-lg border border-line bg-surface">

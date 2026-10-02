@@ -49,6 +49,32 @@ describe('KycUploader', () => {
       </ToastProvider>
     );
 
-    expect(screen.getByRole('button', { name: /replace/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled();
+  });
+
+  it('offers Submit before the required form exists and Replace after', () => {
+    const { rerender } = render(
+      <ToastProvider>
+        <KycUploader requiredDocumentType="W-9" documents={[]} isLoading={false} />
+      </ToastProvider>
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Submit W-9' })
+    ).toBeInTheDocument();
+
+    rerender(
+      <ToastProvider>
+        <KycUploader
+          requiredDocumentType="W-9"
+          documents={documentStatus.documents}
+          isLoading={false}
+        />
+      </ToastProvider>
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Replace W-9' })
+    ).toBeInTheDocument();
   });
 });
