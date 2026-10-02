@@ -254,11 +254,18 @@ def test_sale_event_requires_good_date():
         EventCreate(event_id="sale-without-date", type="sale", payment_record_id="pay-1")
 
 
-def test_sale_event_requires_payment_record_id():
+@pytest.mark.parametrize("payment_record_id", [None, "", "   "])
+def test_sale_event_requires_payment_record_id(payment_record_id):
     with pytest.raises(ValidationError, match="payment_record_id is required for sale events"):
-        EventCreate(event_id="sale-without-payment-id", type="sale", good_date=date(2026, 10, 1))
+        EventCreate(
+            event_id="sale-without-payment-id",
+            type="sale",
+            good_date=date(2026, 10, 1),
+            payment_record_id=payment_record_id,
+        )
 
 
-def test_click_event_does_not_require_good_date():
-    event = EventCreate(event_id="click-without-date", type="click")
+@pytest.mark.parametrize("event_type", ["click", "lead"])
+def test_non_sale_event_does_not_require_good_date(event_type):
+    event = EventCreate(event_id=f"{event_type}-without-date", type=event_type)
     assert event.good_date is None

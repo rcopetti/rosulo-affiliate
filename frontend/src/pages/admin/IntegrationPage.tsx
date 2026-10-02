@@ -134,7 +134,9 @@ Please provide:
     "customer_id": "cust-001",
     "amount": 100.00,
     "currency": "USD",
-    "payment_sequence": 1
+    "payment_sequence": 1,
+    "good_date": "2026-10-01",
+    "payment_record_id": "<merchant-payment-id>"
   }'`;
 
   const saleAiPrompt = `I need a complete Rosulo Affiliate integration for my service. Please implement the full flow based on my backend service <your-backend-service-name>.
@@ -193,6 +195,8 @@ When a payment is confirmed:
     - amount: the payment amount (number)
     - currency: 3-letter code such as "USD"
     - payment_sequence: integer 1 for the first payment, 2 for the second, 3 for the third, etc.
+    - good_date: the payment date in YYYY-MM-DD format (required)
+    - payment_record_id: your internal payment id used to correlate the sale with your payment records (required)
 - The backend will resolve the lead_id to the correct campaign and affiliate.
 - Call the endpoint only after the payment is confirmed and successful.
 

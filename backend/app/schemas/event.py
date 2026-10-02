@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class EventCreate(BaseModel):
@@ -24,6 +24,13 @@ class EventCreate(BaseModel):
     user_agent: str | None = None
     ip_address: str | None = None
     occurred_at: datetime | None = None
+
+    @field_validator("payment_record_id")
+    @classmethod
+    def strip_payment_record_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return value.strip()
 
     @model_validator(mode="after")
     def sale_requires_good_date_and_payment_record_id(self):
