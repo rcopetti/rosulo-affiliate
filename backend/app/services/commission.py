@@ -1,8 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from uuid import UUID
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import is_supported_currency, quantize_ledger_amount
@@ -163,29 +162,6 @@ async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = No
             promoted += 1
     await db.commit()
     return promoted
-
-
-async def mark_available_commissions(db: AsyncSession, affiliate_id: UUID):
-    active_reservation = (
-        select(PayoutCommission.id)
-        .join(Payout, Payout.id == PayoutCommission.payout_id)
-        .where(
-            PayoutCommission.commission_id == Commission.id,
-            Payout.status.in_(("pending_approval", "approved")),
-        )
-        .exists()
-    )
-    await db.execute(
-        update(Commission)
-        .where(
-            Commission.affiliate_id == affiliate_id,
-            Commission.status == "pending",
-            Commission.available_on <= date.today(),
-            ~active_reservation,
-        )
-        .values(status="available")
-    )
-    await db.commit()
 
 
 async def create_reversal(db: AsyncSession, event: Event, affiliate: Affiliate) -> Commission:

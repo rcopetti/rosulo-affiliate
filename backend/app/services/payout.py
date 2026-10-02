@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import is_supported_currency, normalize_currency_code, quantize_ledger_amount
@@ -17,12 +18,14 @@ from app.db.models import (
     Tenant,
     TenantUser,
 )
-from app.services.commission import mark_available_commissions
 from app.services.document_review import get_document_status
 
 
 async def request_payout(
-    db: AsyncSession, affiliate: Affiliate, currency: str
+    db: AsyncSession,
+    affiliate: Affiliate,
+    currency: str,
+    commission_ids: list[uuid.UUID] | None = None,
 ) -> Payout:
     currency = normalize_currency_code(currency)
     if not is_supported_currency(currency):
@@ -31,19 +34,33 @@ async def request_payout(
     if not eligibility["eligible"]:
         raise HTTPException(status_code=403, detail=eligibility["reason"])
 
-    await mark_available_commissions(db, affiliate.id)
+    filters = [
+        Commission.affiliate_id == affiliate.id,
+        Commission.currency == currency,
+        Commission.status == "available",
+    ]
+    distinct_ids = set(commission_ids) if commission_ids is not None else None
+    if distinct_ids is not None:
+        filters.append(Commission.id.in_(distinct_ids))
+
     result = await db.execute(
         select(Commission)
-        .where(
-            Commission.affiliate_id == affiliate.id,
-            Commission.status == "available",
-            Commission.currency == currency,
-        )
+        .where(*filters)
         .order_by(Commission.id)
         .with_for_update()
     )
     commissions = result.scalars().all()
-    if not commissions:
+
+    if distinct_ids is not None:
+        # Every submitted ID must resolve to an available commission owned by
+        # this affiliate in this currency; anything missing means the row is
+        # reserved/paid, belongs to someone else, or has another currency.
+        if len(commissions) != len(distinct_ids):
+            raise HTTPException(
+                status_code=409,
+                detail="One or more commissions are not available for payout",
+            )
+    elif not commissions:
         raise HTTPException(status_code=400, detail="No available commissions")
 
     gross = quantize_ledger_amount(
@@ -70,17 +87,30 @@ async def request_payout(
     await db.flush()
 
     for commission in commissions:
-        commission.status = "pending"
+        commission.status = "reserved"
         db.add(
             PayoutCommission(
                 payout_id=payout.id,
                 commission_id=commission.id,
                 amount=commission.gross_amount,
+                is_active=True,
             )
         )
-    await _record_transition(db, payout, None, "pending_approval", None)
 
-    await db.commit()
+    try:
+        # The transition query autoflushes the link inserts, so an
+        # active-reservation race surfaces here as well as at commit.
+        await _record_transition(db, payout, None, "pending_approval", None)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        diag = getattr(exc.orig, "diag", None)
+        if getattr(diag, "constraint_name", None) != "uq_payout_commissions_active_commission":
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail="One or more commissions are not available for payout",
+        ) from exc
     await db.refresh(payout)
     return payout
 
@@ -116,16 +146,10 @@ async def reject_payout(
     if payout.status != "pending_approval":
         raise HTTPException(status_code=400, detail="Payout cannot be rejected")
 
-    commission_ids = [item.commission_id for item in payout.payout_commissions]
-    commissions_result = await db.execute(
-        select(Commission).where(Commission.id.in_(commission_ids)).with_for_update()
-    )
-    commissions = commissions_result.scalars().all()
-    if len(commissions) != len(commission_ids) or any(
-        commission.status != "pending" for commission in commissions
-    ):
-        raise HTTPException(status_code=409, detail="Payout commission reservation is inconsistent")
+    commissions = await _verify_linked_commissions(db, payout)
 
+    for link in payout.payout_commissions:
+        link.is_active = False
     for commission in commissions:
         commission.status = "available"
     previous_status = payout.status
@@ -157,15 +181,7 @@ async def confirm_payout_payment(
     if payout.status != "approved":
         raise HTTPException(status_code=400, detail="Payout must be approved before payment confirmation")
 
-    commission_ids = [item.commission_id for item in payout.payout_commissions]
-    commissions_result = await db.execute(
-        select(Commission).where(Commission.id.in_(commission_ids)).with_for_update()
-    )
-    commissions = commissions_result.scalars().all()
-    if len(commissions) != len(commission_ids) or any(
-        commission.status != "pending" for commission in commissions
-    ):
-        raise HTTPException(status_code=409, detail="Payout commission reservation is inconsistent")
+    commissions = await _verify_linked_commissions(db, payout)
 
     paid_at = datetime.now(timezone.utc)
     payment_record = PaymentRecord(
@@ -181,6 +197,8 @@ async def confirm_payout_payment(
         recorded_by_tenant_user_id=reviewer.id,
     )
     db.add(payment_record)
+    for link in payout.payout_commissions:
+        link.is_active = False
     for commission in commissions:
         commission.status = "paid"
 
@@ -191,6 +209,55 @@ async def confirm_payout_payment(
     await db.commit()
     await db.refresh(payout)
     return payout
+
+
+async def _verify_linked_commissions(
+    db: AsyncSession, payout: Payout
+) -> list[Commission]:
+    """Lock and validate the commissions reserved by this payout.
+
+    A linked commission is consistent when it is stored ``reserved`` behind
+    this payout's active ``PayoutCommission`` link, or — for rows written
+    before ``is_active`` existed — still stored ``pending`` with no active
+    link, because the parent payout's ``pending_approval``/``approved``
+    status alone expressed the reservation. Any other shape (a missing row,
+    an active link held by another payout, or an unexpected status) means
+    the reservation is inconsistent.
+    """
+    links = list(payout.payout_commissions)
+    commission_ids = [link.commission_id for link in links]
+    commissions_result = await db.execute(
+        select(Commission).where(Commission.id.in_(commission_ids)).with_for_update()
+    )
+    commissions = commissions_result.scalars().all()
+    if len(commissions) != len(commission_ids):
+        raise HTTPException(
+            status_code=409, detail="Payout commission reservation is inconsistent"
+        )
+
+    active_result = await db.execute(
+        select(PayoutCommission).where(
+            PayoutCommission.commission_id.in_(commission_ids),
+            PayoutCommission.is_active.is_(True),
+        )
+    )
+    active_holders = {
+        link.commission_id: link.payout_id for link in active_result.scalars()
+    }
+    for commission in commissions:
+        holder = active_holders.get(commission.id)
+        if holder is not None:
+            if holder != payout.id or commission.status != "reserved":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Payout commission reservation is inconsistent",
+                )
+        elif commission.status != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Payout commission reservation is inconsistent",
+            )
+    return commissions
 
 
 async def _lock_payout(db: AsyncSession, payout_id: uuid.UUID) -> Payout:

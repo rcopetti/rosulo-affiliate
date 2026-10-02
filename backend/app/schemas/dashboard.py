@@ -9,6 +9,7 @@ class CurrencyBalanceOut(BaseModel):
     earned: float
     pending: float
     available: float
+    reserved: float
     paid: float
     tax_retained: float
     reversal_total: float
@@ -19,6 +20,7 @@ class BalanceOut(BaseModel):
     earned: float | None
     pending: float | None
     available: float | None
+    reserved: float | None
     paid: float | None
     reversed: float | None
     tax_retained: float | None

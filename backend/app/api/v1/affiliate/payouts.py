@@ -17,7 +17,9 @@ async def request_payout(
     affiliate: Affiliate = Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
-    return await payout_service.request_payout(db, affiliate, data.currency)
+    return await payout_service.request_payout(
+        db, affiliate, data.currency, data.commission_ids
+    )
 
 
 @router.get("/payouts", response_model=list[PayoutOut])

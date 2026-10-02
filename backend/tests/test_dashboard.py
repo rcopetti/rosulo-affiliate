@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -126,3 +126,40 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
     assert set(liability_by_currency) == {"USD", "EUR"}
     assert liability_by_currency["USD"]["gross"] == 10.0
     assert liability_by_currency["EUR"]["gross"] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_reserved_commissions_remain_in_tenant_liability(
+    client: AsyncClient, payout_scenario
+):
+    due = date.today() - timedelta(days=1)
+    selected = await payout_scenario.create_commission(
+        due, "liab-selected-1", status="available"
+    )
+    await payout_scenario.create_commission(
+        due, "liab-available-1", status="available"
+    )
+    await payout_scenario.create_commission(
+        due, "liab-pending-1", status="pending"
+    )
+
+    reserve = await client.post(
+        "/api/v1/affiliate/payout-requests",
+        headers=payout_scenario.affiliate_headers,
+        json={"currency": "USD", "commission_ids": [str(selected)]},
+    )
+    assert reserve.status_code == 200
+    assert await payout_scenario.commission_status(selected) == "reserved"
+
+    response = await client.get(
+        "/api/v1/admin/dashboard",
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+    )
+    assert response.status_code == 200
+    usd = next(
+        row
+        for row in response.json()["commission_liability"]
+        if row["currency"] == "USD"
+    )
+    # available + pending + reserved commissions all remain merchant liability
+    assert usd["gross"] == 30.0

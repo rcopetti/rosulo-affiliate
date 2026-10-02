@@ -111,7 +111,7 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
         .join(Event, Commission.event_id == Event.id)
         .where(
             Event.tenant_id == tenant_id,
-            Commission.status.in_(["available", "pending"]),
+            Commission.status.in_(["available", "pending", "reserved"]),
         )
         .group_by(period_expr, Commission.currency)
     )

@@ -5,7 +5,19 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PayoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     currency: str = Field(..., pattern="^[A-Za-z]{3}$")
+    commission_ids: list[uuid.UUID] | None = None
+
+    @field_validator("commission_ids")
+    @classmethod
+    def validate_commission_ids(
+        cls, value: list[uuid.UUID] | None
+    ) -> list[uuid.UUID] | None:
+        if value is not None and (not value or len(value) != len(set(value))):
+            raise ValueError("commission_ids must contain unique commission IDs")
+        return value
 
 
 class PayoutPaymentConfirmation(BaseModel):

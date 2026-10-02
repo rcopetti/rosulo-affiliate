@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -15,3 +15,4 @@ class CommissionOut(BaseModel):
     currency: str
     status: str
     available_on: date | None = None
+    available_at: datetime | None = None
