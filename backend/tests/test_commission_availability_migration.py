@@ -162,6 +162,12 @@ async def test_preflight_accepts_commission_linked_to_one_active_and_one_closed_
 
 @pytest.mark.asyncio
 async def test_preflight_rejects_legacy_payout_status():
+    # ck_payouts_status only exists from f9a0b1c2d3e4 onward; this preflight
+    # guards the earlier revision where legacy statuses could still be stored.
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.text("ALTER TABLE payouts DROP CONSTRAINT ck_payouts_status")
+        )
     async with async_session() as session:
         tenant, affiliate, _ = await _create_sale_commission(session)
         await _create_payout(session, affiliate, tenant, status="requested")

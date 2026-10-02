@@ -19,7 +19,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 
 from app.db.base import Base
 
@@ -294,6 +294,12 @@ class Commission(Base):
 
 class Payout(Base):
     __tablename__ = "payouts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_approval', 'approved', 'rejected', 'paid')",
+            name="ck_payouts_status",
+        ),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
@@ -304,7 +310,12 @@ class Payout(Base):
     net_paid = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     paypal_batch_id = Column(String, nullable=True)
-    status = Column(String, default="pending_approval")
+    status = Column(
+        String,
+        nullable=False,
+        default="pending_approval",
+        server_default="pending_approval",
+    )
     requested_at = Column(DateTime(timezone=True), default=now_utc)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     paid_at = Column(DateTime(timezone=True), nullable=True)
@@ -314,12 +325,59 @@ class Payout(Base):
     affiliate = relationship("Affiliate", back_populates="payouts", lazy="selectin")
     payout_commissions = relationship("PayoutCommission", back_populates="payout", lazy="selectin")
     payment_record = relationship("PaymentRecord", back_populates="payout", uselist=False, lazy="selectin")
+    payout_payment = relationship("PayoutPayment", back_populates="payout", uselist=False, lazy="selectin")
+    payout_notification = relationship(
+        "PayoutNotification", back_populates="payout", uselist=False, lazy="selectin"
+    )
+    notification = synonym("payout_notification")
     transitions = relationship(
         "PayoutTransition",
         back_populates="payout",
         order_by="PayoutTransition.sequence",
         lazy="selectin",
     )
+
+
+class PayoutPayment(Base):
+    __tablename__ = "payout_payments"
+    __table_args__ = (UniqueConstraint("payout_id", name="uq_payout_payments_payout_id"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
+    amount = Column(Numeric(20, 2), nullable=False)
+    currency = Column(String, nullable=False, default="USD")
+    payment_method = Column(String, nullable=False)
+    transfer_reference = Column(String, nullable=False)
+    paid_at = Column(DateTime(timezone=True), nullable=False)
+    recorded_by_tenant_user_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=False
+    )
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    payout = relationship("Payout", back_populates="payout_payment")
+    recorded_by = relationship("TenantUser")
+
+
+class PayoutNotification(Base):
+    __tablename__ = "payout_notifications"
+    __table_args__ = (
+        UniqueConstraint("payout_id", name="uq_payout_notifications_payout_id"),
+        CheckConstraint(
+            "status IN ('pending', 'sending', 'sent', 'failed')",
+            name="ck_payout_notifications_status",
+        ),
+    )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
+    status = Column(String, nullable=False, default="pending", server_default="pending")
+    attempt_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    payout = relationship("Payout", back_populates="payout_notification")
 
 
 class PayoutCommission(Base):
