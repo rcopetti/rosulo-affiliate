@@ -20,7 +20,7 @@ from app.db.models import (
 )
 from app.db.session import async_session
 from app.schemas.event import EventCreate
-from app.services.commission import mature_due_commissions
+from app.services.commission import mature_due_commissions, utc_midnight
 
 
 @pytest.mark.asyncio
@@ -352,7 +352,7 @@ async def test_sale_event_stores_payment_record_id_and_matures_on_good_date(
             )
         ).scalar_one()
         assert commission.status == "pending"
-        assert commission.available_on == good_date
+        assert commission.available_at == utc_midnight(good_date)
 
     # No webhook call: maturing due commissions promotes purely on good_date.
     async with async_session() as db:

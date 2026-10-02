@@ -207,7 +207,6 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
         *,
         status="pending",
         available_at="auto",
-        available_on=None,
     ):
         """Insert a sale Event plus a Commission; returns the commission id.
 
@@ -217,8 +216,6 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
         """
         if available_at == "auto":
             available_at = utc_midnight(good_date)
-        if available_on is None:
-            available_on = good_date
         async with async_session() as db:
             event = Event(
                 event_id=f"sale-{payment_record_id}",
@@ -244,7 +241,6 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
                 net_amount=Decimal("10.00"),
                 currency="USD",
                 status=status,
-                available_on=available_on,
                 available_at=available_at,
             )
             db.add(commission)

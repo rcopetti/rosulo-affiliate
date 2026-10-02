@@ -121,7 +121,6 @@ export interface Commission {
   net_amount: number;
   currency: string;
   status: 'pending' | 'available' | 'reserved' | 'paid' | 'reversed';
-  available_on?: string | null;
   available_at?: string | null;
 }
 

@@ -103,7 +103,6 @@ async def calculate_from_sale_event(
         net_amount=net,
         currency=event.currency,
         status="pending",
-        available_on=event.good_date,
         available_at=utc_midnight(event.good_date),
     )
     db.add(commission)
@@ -124,8 +123,7 @@ async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = No
 
     Rows written by an older app version after the expand migration may have
     a null ``available_at``; the due instant is then derived as UTC midnight
-    of ``Event.good_date`` and both ``available_at`` and the legacy
-    ``available_on`` are backfilled from it.
+    of ``Event.good_date`` and ``available_at`` is backfilled from it.
     """
     if now_utc is None:
         now_utc = datetime.now(timezone.utc)
@@ -164,7 +162,6 @@ async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = No
                 continue
             due_at = utc_midnight(event.good_date)
             commission.available_at = due_at
-            commission.available_on = event.good_date
         if due_at <= now_utc:
             commission.status = "available"
             promoted += 1

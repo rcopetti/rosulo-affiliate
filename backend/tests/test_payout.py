@@ -261,12 +261,15 @@ async def test_payout_flow(client: AsyncClient, tenant: Tenant, tenant_user, mon
     for commission in commissions.json():
         by_currency.setdefault(commission["currency"], []).append(commission)
     assert by_currency["USD"][0]["status"] == "reserved"
-    assert by_currency["USD"][0]["available_on"] == str(sale_date)
+    assert "available_on" not in by_currency["USD"][0]
+    assert datetime.fromisoformat(
+        by_currency["USD"][0]["available_at"]
+    ) == utc_midnight(sale_date)
     assert sorted(item["status"] for item in by_currency["EUR"]) == ["available", "pending"]
-    assert sorted(item["available_on"] for item in by_currency["EUR"]) == [
-        str(sale_date),
-        str(eur_future_date),
-    ]
+    assert sorted(
+        datetime.fromisoformat(item["available_at"])
+        for item in by_currency["EUR"]
+    ) == [utc_midnight(sale_date), utc_midnight(eur_future_date)]
 
     premature_payment = await client.post(
         f"/api/v1/admin/payouts/{payout_id}/confirm-payment",
@@ -487,7 +490,6 @@ async def _create_foreign_commission(payout_scenario, payment_record_id: str):
             net_amount=Decimal("10.00"),
             currency="USD",
             status="available",
-            available_on=PAST_DUE,
             available_at=utc_midnight(PAST_DUE),
         )
         db.add(commission)

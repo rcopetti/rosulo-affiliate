@@ -118,20 +118,17 @@ async def test_maturity_backfills_null_available_at_from_event_good_date(
     payout_scenario,
 ):
     """Rows written by an older app version after the expand migration may
-    carry a null available_at (and a good_date+14 available_on); the job
-    derives UTC midnight from Event.good_date and mirrors it into
-    available_on."""
+    carry a null available_at; the job derives UTC midnight from
+    Event.good_date and backfills available_at."""
     legacy_due_id = await payout_scenario.create_commission(
         date(2026, 10, 1),
         "payment-legacy-due",
         available_at=None,
-        available_on=date(2026, 10, 15),
     )
     legacy_future_id = await payout_scenario.create_commission(
         date(2026, 10, 5),
         "payment-legacy-future",
         available_at=None,
-        available_on=date(2026, 10, 19),
     )
 
     async with payout_scenario.db_session() as db:
@@ -142,10 +139,8 @@ async def test_maturity_backfills_null_available_at_from_event_good_date(
     assert promoted == 1
     assert due_row.status == "available"
     assert due_row.available_at == datetime(2026, 10, 1, tzinfo=timezone.utc)
-    assert due_row.available_on == date(2026, 10, 1)
     assert future_row.status == "pending"
     assert future_row.available_at == datetime(2026, 10, 5, tzinfo=timezone.utc)
-    assert future_row.available_on == date(2026, 10, 5)
 
 
 @pytest.mark.asyncio

@@ -242,29 +242,6 @@ class Event(Base):
     commissions = relationship("Commission", back_populates="event")
 
 
-class PaymentRecord(Base):
-    __tablename__ = "payment_records"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_payment_id = Column(String, nullable=True, index=True)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    customer_id = Column(String, nullable=True)
-    amount = Column(Numeric(20, 2), nullable=False)
-    currency = Column(String, default="USD")
-    paid_at = Column(DateTime(timezone=True), default=now_utc)
-    sequence_number = Column(Integer, default=1)
-    status = Column(String, default="paid")
-    record_type = Column(String, nullable=False, default="incoming_payment")
-    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=True, unique=True)
-    payment_method = Column(String, nullable=True)
-    transfer_reference = Column(String, nullable=True)
-    recorded_by_tenant_user_id = Column(
-        UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=True
-    )
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-
-    payout = relationship("Payout", back_populates="payment_record")
-
-
 class Commission(Base):
     __tablename__ = "commissions"
     __table_args__ = (
@@ -282,7 +259,6 @@ class Commission(Base):
     net_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     status = Column(String, default="pending")
-    available_on = Column(Date, nullable=True)
     available_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
@@ -309,7 +285,6 @@ class Payout(Base):
     paypal_fees = Column(Numeric(20, 2), default=Decimal("0.00"))
     net_paid = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
-    paypal_batch_id = Column(String, nullable=True)
     status = Column(
         String,
         nullable=False,
@@ -324,7 +299,6 @@ class Payout(Base):
 
     affiliate = relationship("Affiliate", back_populates="payouts", lazy="selectin")
     payout_commissions = relationship("PayoutCommission", back_populates="payout", lazy="selectin")
-    payment_record = relationship("PaymentRecord", back_populates="payout", uselist=False, lazy="selectin")
     payout_payment = relationship("PayoutPayment", back_populates="payout", uselist=False, lazy="selectin")
     payout_notification = relationship(
         "PayoutNotification", back_populates="payout", uselist=False, lazy="selectin"

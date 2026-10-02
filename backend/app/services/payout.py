@@ -477,7 +477,6 @@ async def list_affiliate_payout_history(
             selectinload(Payout.payout_payment),
             noload(Payout.affiliate),
             noload(Payout.payout_commissions),
-            noload(Payout.payment_record),
             noload(Payout.payout_notification),
             noload(Payout.transitions),
         )
