@@ -107,14 +107,14 @@ export interface Campaign {
 export interface Commission {
   id: string;
   event_id: string;
-  affiliate_id: string;
   campaign_id?: string;
   gross_amount: number;
   withholding_amount: number;
   net_amount: number;
   currency: string;
-  status: 'pending' | 'available' | 'paid' | 'reversed';
-  available_on?: string;
+  status: 'pending' | 'available' | 'reserved' | 'paid' | 'reversed';
+  available_on?: string | null;
+  available_at?: string | null;
 }
 
 export interface PayoutPaymentConfirmation {
@@ -162,12 +162,18 @@ export interface Payout {
   commissions?: Commission[];
 }
 
+export interface PayoutRequestPayload {
+  currency: string;
+  commission_ids?: string[];
+}
+
 export interface CurrencyBalance {
   currency: string;
   earned: number;
   pending: number;
   available: number;
   paid: number;
+  reserved: number;
   tax_retained: number;
   reversal_total: number;
 }
@@ -178,6 +184,7 @@ export interface Balance {
   pending: number | null;
   available: number | null;
   paid: number | null;
+  reserved: number | null;
   reversed: number | null;
   tax_retained: number | null;
   reversal_total: number | null;

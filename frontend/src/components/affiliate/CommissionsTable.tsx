@@ -3,9 +3,10 @@ import { Badge } from '@/components/ui/Badge';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { formatCurrency } from '@/lib/utils';
 
-const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+const statusVariant: Record<Commission['status'], 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   pending: 'warning',
   available: 'success',
+  reserved: 'info',
   paid: 'info',
   reversed: 'danger',
 };
