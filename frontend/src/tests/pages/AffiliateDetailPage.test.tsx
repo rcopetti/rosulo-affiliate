@@ -111,7 +111,20 @@ describe('AffiliateDetailPage', () => {
 
     expect(await screen.findByText('Tax form rejected')).toBeInTheDocument();
     expect(screen.getAllByText(/The form is unsigned/).length).toBeGreaterThan(0);
+  });
+
+  it('hides review controls on a rejected document until Review is clicked', async () => {
+    renderPage();
+
+    await screen.findByText('Tax documents');
+    expect(screen.queryByLabelText(/rejection reason/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve tax form' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
     expect(screen.getByLabelText(/rejection reason/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve tax form' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reject tax form' })).toBeInTheDocument();
   });
 
   it('shows per-currency paid totals and the payout history', async () => {

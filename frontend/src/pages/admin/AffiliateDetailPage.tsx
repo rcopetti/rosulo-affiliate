@@ -24,6 +24,7 @@ export function AffiliateDetailPage() {
   const [documentPreviewType, setDocumentPreviewType] = useState<string | null>(null);
   const [documentPreviewContentType, setDocumentPreviewContentType] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
+  const [reviewOpen, setReviewOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => () => {
     if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
@@ -243,55 +244,76 @@ export function AffiliateDetailPage() {
                         </p>
                       ))}
                     </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          const preview = await viewAffiliateDocument(id!, document.id);
-                          setDocumentPreviewUrl(preview.url);
-                          setDocumentPreviewContentType(preview.contentType);
-                          setDocumentPreviewType(document.content_type);
-                        } catch {
-                          toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
-                        }
-                      }}
-                    >
-                      View securely
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const preview = await viewAffiliateDocument(id!, document.id);
+                            setDocumentPreviewUrl(preview.url);
+                            setDocumentPreviewContentType(preview.contentType);
+                            setDocumentPreviewType(document.content_type);
+                          } catch {
+                            toast.add({ title: 'Preview failed', description: 'Could not load the encrypted document', variant: 'error' });
+                          }
+                        }}
+                      >
+                        View securely
+                      </Button>
+                      {document.status !== 'pending' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          aria-expanded={!!reviewOpen[document.id]}
+                          onClick={() =>
+                            setReviewOpen((current) => ({
+                              ...current,
+                              [document.id]: !current[document.id],
+                            }))
+                          }
+                        >
+                          Review
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <label className="block text-xs text-fg-muted">
-                    Rejection reason
-                    <textarea
-                      aria-label={`Rejection reason for ${document.document_type}`}
-                      className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg"
-                      rows={2}
-                      value={rejectionReasons[document.id] || ''}
-                      onChange={(event) => setRejectionReasons((current) => ({ ...current, [document.id]: event.target.value }))}
-                    />
-                  </label>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => review.mutate({ documentId: document.id, status: 'approved' })}
-                      isLoading={review.isPending}
-                    >
-                      Approve tax form
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={!rejectionReasons[document.id]?.trim()}
-                      onClick={() => review.mutate({
-                        documentId: document.id,
-                        status: 'rejected',
-                        rejectionReason: (rejectionReasons[document.id] || '').trim(),
-                      })}
-                      isLoading={review.isPending}
-                    >
-                      Reject tax form
-                    </Button>
-                  </div>
+                  {(document.status === 'pending' || reviewOpen[document.id]) && (
+                    <>
+                      <label className="block text-xs text-fg-muted">
+                        Rejection reason
+                        <textarea
+                          aria-label={`Rejection reason for ${document.document_type}`}
+                          className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg"
+                          rows={2}
+                          value={rejectionReasons[document.id] || ''}
+                          onChange={(event) => setRejectionReasons((current) => ({ ...current, [document.id]: event.target.value }))}
+                        />
+                      </label>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => review.mutate({ documentId: document.id, status: 'approved' })}
+                          isLoading={review.isPending}
+                        >
+                          Approve tax form
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          disabled={!rejectionReasons[document.id]?.trim()}
+                          onClick={() => review.mutate({
+                            documentId: document.id,
+                            status: 'rejected',
+                            rejectionReason: (rejectionReasons[document.id] || '').trim(),
+                          })}
+                          isLoading={review.isPending}
+                        >
+                          Reject tax form
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
           </div>
