@@ -11,7 +11,11 @@ from app.api.v1.dependencies import get_tenant, get_tenant_user
 from app.db.dependencies import get_db
 from app.db.models import AffiliateDocument, Tenant, TenantUser
 from app.schemas.affiliate import AffiliateOut, AffiliatePayoutHistory
-from app.schemas.affiliate_invite import AffiliateInviteCreate, AffiliateInviteOut
+from app.schemas.affiliate_invite import (
+    AffiliateInviteCreate,
+    AffiliateInviteListOut,
+    AffiliateInviteOut,
+)
 from app.schemas.document_review import DocumentReviewCreate
 from app.services import affiliate as affiliate_service
 from app.services import affiliate_invite as invite_service
@@ -30,6 +34,12 @@ async def admin_create_invite(data: AffiliateInviteCreate, tenant: Tenant = Depe
 @router.get("", response_model=list[AffiliateOut])
 async def admin_list_affiliates(tenant: Tenant = Depends(get_tenant), db: AsyncSession = Depends(get_db)):
     return await affiliate_service.list_affiliates(db, tenant)
+
+
+# Declared before /{affiliate_id} so "invites" is not parsed as an affiliate UUID.
+@router.get("/invites", response_model=list[AffiliateInviteListOut])
+async def admin_list_pending_invites(tenant: Tenant = Depends(get_tenant), db: AsyncSession = Depends(get_db)):
+    return await invite_service.list_pending_invites(db, tenant)
 
 
 @router.get("/{affiliate_id}", response_model=AffiliateOut)

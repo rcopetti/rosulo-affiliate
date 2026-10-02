@@ -51,6 +51,20 @@ async def _get_valid_invite(db: AsyncSession, token: str, email: str) -> Affilia
     return invite
 
 
+async def list_pending_invites(
+    db: AsyncSession, tenant: Tenant
+) -> list[AffiliateInvite]:
+    result = await db.execute(
+        select(AffiliateInvite)
+        .where(
+            AffiliateInvite.tenant_id == tenant.id,
+            AffiliateInvite.status == "pending",
+        )
+        .order_by(AffiliateInvite.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def accept_invite(
     db: AsyncSession, data: AffiliateInviteAccept
 ) -> tuple[AffiliateAccount, Tenant]:

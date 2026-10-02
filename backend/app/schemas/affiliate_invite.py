@@ -37,6 +37,15 @@ class AffiliateInviteAccept(BaseModel):
     paypal_email: str | None = None
 
 
+class AffiliateInviteListOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    email: str
+    status: str
+    expires_at: datetime.datetime | None = None
+    created_at: datetime.datetime
+
+
 class PendingInviteOut(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID

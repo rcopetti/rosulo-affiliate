@@ -18,8 +18,21 @@ export interface InviteOut {
   created_at: string;
 }
 
+export interface AffiliateInviteListItem {
+  id: string;
+  email: string;
+  status: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
 export async function getAffiliates(): Promise<Affiliate[]> {
   const res = await adminApi.get<Affiliate[]>('/admin/affiliates');
+  return res.data;
+}
+
+export async function getAffiliateInvites(): Promise<AffiliateInviteListItem[]> {
+  const res = await adminApi.get<AffiliateInviteListItem[]>('/admin/affiliates/invites');
   return res.data;
 }
 

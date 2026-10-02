@@ -1,9 +1,13 @@
+import uuid
 from unittest.mock import MagicMock
 
 import pytest
 from httpx import AsyncClient
 
 from app.core.config import settings
+from app.core.security import hash_api_key
+from app.db.models import AffiliateInvite, Tenant
+from app.db.session import async_session
 
 
 @pytest.mark.asyncio
@@ -89,3 +93,80 @@ async def test_admin_list_affiliates_after_accept(
     assert r.status_code == 200
     data = r.json()
     assert any(a["tenant_id"] == str(tenant.id) for a in data)
+
+
+async def _admin_token(client: AsyncClient) -> str:
+    admin_login = await client.post(
+        "/api/v1/auth/tenant/login",
+        json={"email": "admin@allbum.me", "password": "admin123"},
+    )
+    return admin_login.json()["token"]
+
+
+@pytest.mark.asyncio
+async def test_admin_list_invites_shows_only_pending(
+    client: AsyncClient, tenant_user
+):
+    admin_token = await _admin_token(client)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    await client.post(
+        "/api/v1/admin/affiliates",
+        headers=headers,
+        json={"email": "pending@example.com"},
+    )
+    accepted = await client.post(
+        "/api/v1/admin/affiliates",
+        headers=headers,
+        json={"email": "accepted@example.com"},
+    )
+    await client.post(
+        "/api/v1/auth/affiliate/accept-invite",
+        json={
+            "token": accepted.json()["token"],
+            "email": "accepted@example.com",
+            "password": "secret123",
+            "name": "Accepted Affiliate",
+            "country": "US",
+        },
+    )
+
+    r = await client.get("/api/v1/admin/affiliates/invites", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert [i["email"] for i in data] == ["pending@example.com"]
+    assert data[0]["status"] == "pending"
+    assert "token" not in data[0]
+
+
+@pytest.mark.asyncio
+async def test_admin_list_invites_is_tenant_scoped(
+    client: AsyncClient, tenant_user
+):
+    admin_token = await _admin_token(client)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    await client.post(
+        "/api/v1/admin/affiliates",
+        headers=headers,
+        json={"email": "ours@example.com"},
+    )
+    async with async_session() as db:
+        other = Tenant(
+            name="other", api_key_hash=hash_api_key(f"key-{uuid.uuid4()}")
+        )
+        db.add(other)
+        await db.flush()
+        db.add(
+            AffiliateInvite(
+                tenant_id=other.id,
+                email="theirs@example.com",
+                token="other-tenant-token",
+                status="pending",
+            )
+        )
+        await db.commit()
+
+    r = await client.get("/api/v1/admin/affiliates/invites", headers=headers)
+    assert r.status_code == 200
+    assert [i["email"] for i in r.json()] == ["ours@example.com"]

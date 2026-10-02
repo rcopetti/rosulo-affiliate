@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { createAffiliate } from '@/api/admin/affiliates';
 import { AffiliateForm, AffiliateFormData } from '@/components/admin/AffiliateForm';
@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast';
 export function AffiliateCreatePage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: (data: AffiliateFormData) =>
@@ -16,6 +17,7 @@ export function AffiliateCreatePage() {
         contract_terms: [{ payment_sequence: 1, commission_percent: 10 }],
       }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-affiliate-invites'] });
       toast.add({ title: 'Invitation sent', variant: 'success' });
       navigate('/admin/affiliates');
     },
