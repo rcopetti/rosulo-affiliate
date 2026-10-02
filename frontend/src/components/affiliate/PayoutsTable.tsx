@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Payout } from '@/api/types';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { PayoutStatusBadge } from '@/components/shared/PayoutStatusBadge';
@@ -50,6 +51,20 @@ const columns: Column<Payout>[] = [
       </span>
     ) : <span className="text-fg-subtle">—</span>,
     headerClassName: 'w-48',
+  },
+  {
+    key: 'detail',
+    header: '',
+    render: (p) => (
+      <Link
+        to={`/affiliate/payouts/${p.id}`}
+        className="text-brand-600 hover:underline whitespace-nowrap"
+      >
+        Details
+      </Link>
+    ),
+    className: 'text-right whitespace-nowrap',
+    headerClassName: 'w-20',
   },
 ];
 

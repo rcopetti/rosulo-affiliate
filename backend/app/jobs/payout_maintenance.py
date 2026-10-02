@@ -1,10 +1,12 @@
-"""One-shot commission maturity job for the scheduled Fargate task.
+"""One-shot payout maintenance job for the scheduled Fargate task.
 
-Runs ``mature_due_commissions`` once in a single database session, logs a run
-summary, and exits. Intended to be invoked by EventBridge Scheduler as an ECS
-RunTask target — NOT inside the App Runner web server (App Runner can run
-multiple replicas and restart independently, so an in-process scheduler would
-duplicate or lose runs).
+Runs ``mature_due_commissions`` once in a single database session, then
+delivers due payout notifications — ``pending`` rows plus ``sending`` rows
+whose lease expired (a web worker that crashed mid-send) — logs a run
+summary, and exits. Intended to be invoked by EventBridge Scheduler as an
+ECS RunTask target — NOT inside the App Runner web server (App Runner can
+run multiple replicas and restart independently, so an in-process scheduler
+would duplicate or lose runs).
 
 Container command: ``python -m app.jobs.payout_maintenance``
 
@@ -21,6 +23,7 @@ from datetime import datetime, timezone
 
 from app.db.session import async_session
 from app.services.commission import mature_due_commissions
+from app.services.payout_notification import process_due_notifications
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,7 @@ async def run_maturity_job(db_factory=async_session) -> dict:
         async with db_factory() as db:
             async with asyncio.timeout(JOB_TIMEOUT_SECONDS):
                 promoted_count = await mature_due_commissions(db)
+                notification_summary = await process_due_notifications(db)
     except BaseException:
         logger.exception("payout maintenance run failed run_id=%s", run_id)
         raise
@@ -55,6 +59,7 @@ async def run_maturity_job(db_factory=async_session) -> dict:
         "started_at": started_at.isoformat(),
         "ended_at": ended_at.isoformat(),
         "promoted_count": promoted_count,
+        "notifications": notification_summary,
     }
     logger.info("payout maintenance run finished %s", summary)
     return summary

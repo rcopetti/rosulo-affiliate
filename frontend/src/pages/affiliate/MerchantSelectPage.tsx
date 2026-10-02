@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { fetchMerchants, selectMerchant } from '@/api/auth';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { affiliateReturnTenantId, fetchMerchants, safeAffiliateReturnTo, selectMerchant } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 
 export function MerchantSelectPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setTenant = useAuthStore((s) => s.setTenant);
   const toast = useToast();
 
@@ -19,7 +20,25 @@ export function MerchantSelectPage() {
     try {
       await selectMerchant(tenantId);
       setTenant(tenantId);
-      navigate('/affiliate/dashboard');
+      // Continue to a preserved payout deep link only when it targets the
+      // merchant the affiliate just selected; anything else falls back to
+      // the dashboard. The merchants endpoint keys tenants as `tenant_id`
+      // while login responses use `id` — accept either shape here.
+      const merchantIds = (merchants ?? [])
+        .flatMap((merchant) => [
+          merchant.id,
+          (merchant as { tenant_id?: string }).tenant_id,
+        ])
+        .filter((value): value is string => !!value);
+      const returnTo = safeAffiliateReturnTo(
+        searchParams.get('returnTo'),
+        merchantIds
+      );
+      if (returnTo && affiliateReturnTenantId(returnTo) === tenantId) {
+        navigate(returnTo);
+      } else {
+        navigate('/affiliate/dashboard');
+      }
     } catch {
       toast.add({ title: 'Selection failed', description: 'Could not select merchant', variant: 'error' });
     }

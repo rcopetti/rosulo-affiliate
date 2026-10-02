@@ -1,9 +1,24 @@
 import { Payout } from '@/api/types';
 import { PayoutStatusBadge } from '@/components/shared/PayoutStatusBadge';
+import { Button } from '@/components/ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 
-export function PayoutDetail({ payout }: { payout: Payout }) {
+interface PayoutDetailProps {
+  payout: Payout;
+  /** Called with the payout id when the merchant retries a failed
+   * notification email. Omit to hide the action entirely. */
+  onRetryNotification?: (id: string) => void;
+}
+
+const NOTIFICATION_LABELS: Record<string, string> = {
+  pending: 'Email queued',
+  sending: 'Email sending',
+  sent: 'Email sent',
+  failed: 'Email failed',
+};
+
+export function PayoutDetail({ payout, onRetryNotification }: PayoutDetailProps) {
   const lines = payout.payout_commissions ?? [];
   const commissionCount = payout.commission_count ?? lines.length;
   const grossTotal = lines.reduce((sum, line) => sum + line.gross_amount, 0);
@@ -108,6 +123,24 @@ export function PayoutDetail({ payout }: { payout: Payout }) {
           </TableBody>
         </Table>
       </div>
+
+      {payout.payout_notification && (
+        <p className="flex items-center justify-between">
+          <span className="font-medium">Affiliate notification</span>
+          <span className="flex items-center gap-2">
+            <span>{NOTIFICATION_LABELS[payout.payout_notification.status] ?? payout.payout_notification.status}</span>
+            {payout.payout_notification.status === 'failed' && onRetryNotification && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onRetryNotification(payout.id)}
+              >
+                Retry email
+              </Button>
+            )}
+          </span>
+        </p>
+      )}
 
       {payout.payout_payment && (
         <div className="space-y-1 rounded-md bg-surface-muted p-3">

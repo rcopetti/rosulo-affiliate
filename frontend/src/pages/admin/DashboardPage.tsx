@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdminDashboard } from '@/api/admin/dashboard';
-import { approvePayout, confirmPayoutPayment, rejectPayout } from '@/api/admin/payouts';
+import { approvePayout, confirmPayoutPayment, rejectPayout, retryPayoutNotification } from '@/api/admin/payouts';
 import { PayoutPaymentConfirmation } from '@/api/types';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { DataTable, Column } from '@/components/ui/DataTable';
@@ -67,6 +67,18 @@ export function AdminDashboardPage() {
     onError: () => toast.add({ title: 'Error', description: 'Could not record payment', variant: 'error' }),
   });
 
+  const retryNotification = useMutation({
+    mutationFn: retryPayoutNotification,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
+      toast.add({ title: 'Notification email requeued', variant: 'success' });
+    },
+    onError: () =>
+      toast.add({ title: 'Error', description: 'Could not retry notification', variant: 'error' }),
+  });
+
   if (isLoading || !data)
     return (
       <div className="space-y-6">
@@ -117,6 +129,7 @@ export function AdminDashboardPage() {
             onApprove={(id) => approve.mutate(id)}
             onReject={(id) => reject.mutate(id)}
             onConfirmPayment={(id, details) => confirm.mutate({ id, details })}
+            onRetryNotification={(id) => retryNotification.mutate(id)}
           />
         </Card>
       </div>

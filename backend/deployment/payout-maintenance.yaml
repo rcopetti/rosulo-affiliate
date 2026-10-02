@@ -1,9 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   Daily EventBridge Scheduler -> ECS RunTask target that runs the
-  rosulo-affiliate commission maturity job
+  rosulo-affiliate payout maintenance job
   (`python -m app.jobs.payout_maintenance`) on Fargate.
-  The job promotes pending commissions whose merchant due date has arrived.
+  The job promotes pending commissions whose merchant due date has arrived
+  and delivers queued/expired-lease payout notification emails via SES.
   DATABASE_URL is injected from SSM Parameter Store via the ECS Secrets
   field; no credentials appear in the template, schedule payload, or the
   container command line.
@@ -46,6 +47,26 @@ Parameters:
       (SecureString). Only the ARN is referenced; the value never enters
       the template or task logs.
     Default: arn:aws:ssm:us-west-2:239714841352:parameter/rosulo/affiliate-backend/DATABASE_URL
+  EmailFrom:
+    Type: String
+    Description: >-
+      Verified SES sender address for payout notification emails
+      (EMAIL_FROM), e.g. payouts@example.com.
+    AllowedPattern: "^\\S+@\\S+$"
+  SesIdentityArn:
+    Type: String
+    Description: >-
+      ARN of the verified SES identity (domain or email address) that owns
+      EmailFrom, e.g.
+      arn:aws:ses:us-west-2:123456789012:identity/example.com. The task role
+      is granted ses:SendEmail scoped to this identity only.
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:ses:[a-z0-9-]+:\\d{12}:identity/.+$"
+  FrontendUrl:
+    Type: String
+    Description: >-
+      Base URL of the affiliate frontend (FRONTEND_URL); payout emails link
+      to /affiliate/payouts/{id}?tenant_id=... under this origin.
+    AllowedPattern: "^https?://\\S+$"
   LogRetentionInDays:
     Type: Number
     Description: CloudWatch retention for the task log group.
@@ -93,6 +114,15 @@ Resources:
           # The entrypoint dispatcher execs this verbatim; no secrets on
           # the command line.
           Command: ["python", "-m", "app.jobs.payout_maintenance"]
+          Environment:
+            - Name: EMAIL_BACKEND
+              Value: ses
+            - Name: EMAIL_FROM
+              Value: !Ref EmailFrom
+            - Name: SES_REGION
+              Value: !Ref AWS::Region
+            - Name: FRONTEND_URL
+              Value: !Ref FrontendUrl
           Secrets:
             - Name: DATABASE_URL
               ValueFrom: !Ref DatabaseUrlSsmParameterArn
@@ -102,6 +132,27 @@ Resources:
               awslogs-group: !Ref PayoutMaintenanceLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
+
+  # ------------------------------------------------------------------
+  # Task-role grant: the maintenance task sends payout notification emails
+  # via SES. Scoped to ses:SendEmail on the verified sender identity only —
+  # no SendRawEmail, no other identities. Roles takes the role NAME, which
+  # is extracted from the passed TaskRoleArn (expects an unpathed role ARN
+  # of the form arn:aws:iam::<account>:role/<name>).
+  # ------------------------------------------------------------------
+  PayoutMaintenanceSesPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: affiliates-payout-maintenance-ses-send
+      Roles:
+        - !Select [1, !Split ["role/", !Ref TaskRoleArn]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SendPayoutNotificationEmail
+            Effect: Allow
+            Action: ses:SendEmail
+            Resource: !Ref SesIdentityArn
 
   # ------------------------------------------------------------------
   # SQS dead-letter queue for failed schedule deliveries.

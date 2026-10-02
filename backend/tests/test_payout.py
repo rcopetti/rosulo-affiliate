@@ -888,8 +888,17 @@ def _confirm_payload(**overrides) -> dict:
 
 @pytest.mark.asyncio
 async def test_confirm_payment_records_paypal_payment(
-    client: AsyncClient, payout_scenario
+    client: AsyncClient, payout_scenario, monkeypatch
 ):
+    # Stub the post-commit send so this test asserts the committed
+    # notification row, not the delivery outcome (covered in
+    # test_payout_notification.py).
+    async def _no_send(payout_id):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.payout_notification.send_payout_notification", _no_send
+    )
     payout_id = await _approved_payout_id(client, payout_scenario, "confirm-1")
     admin_headers = {"Authorization": f"Bearer {payout_scenario.admin_token}"}
 

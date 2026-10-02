@@ -44,14 +44,22 @@ async def test_run_maturity_job_logs_and_returns_summary(monkeypatch, caplog):
         seen_sessions.append(db)
         return 3
 
+    async def fake_notifications(db):
+        seen_sessions.append(db)
+        return {"claimed": 1, "sent": 1, "failed": 0}
+
     monkeypatch.setattr(payout_maintenance, "mature_due_commissions", fake_mature)
+    monkeypatch.setattr(
+        payout_maintenance, "process_due_notifications", fake_notifications
+    )
     session = _FakeSession()
 
     with caplog.at_level(logging.INFO, logger="app.jobs.payout_maintenance"):
         summary = await payout_maintenance.run_maturity_job(lambda: session)
 
     assert summary["promoted_count"] == 3
-    assert seen_sessions == [session]
+    assert summary["notifications"] == {"claimed": 1, "sent": 1, "failed": 0}
+    assert seen_sessions == [session, session]
     assert session.closed is True
 
     # Run ID is a valid UUID and the UTC timestamps parse.

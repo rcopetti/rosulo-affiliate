@@ -28,3 +28,8 @@ export async function confirmPayoutPayment(
   const res = await adminApi.post<Payout>(`/admin/payouts/${id}/confirm-payment`, data);
   return res.data;
 }
+
+export async function retryPayoutNotification(id: string): Promise<Payout> {
+  const res = await adminApi.post<Payout>(`/admin/payouts/${id}/retry-notification`);
+  return res.data;
+}

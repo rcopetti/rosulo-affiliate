@@ -1,0 +1,10 @@
+{% extends "base.txt" %}
+{% block content %}Hi {{ affiliate_name }},
+
+Your payout of {{ amount_display }} has been sent via PayPal.
+
+Amount: {{ amount_display }}
+PayPal reference: {{ transfer_reference }}
+
+View payout details:
+{{ payout_url }}{% endblock %}

@@ -291,6 +291,40 @@ async def confirm_payout_payment(
     return await _load_payout_detail(db, payout.id)
 
 
+async def retry_payout_notification(db: AsyncSession, payout: Payout) -> Payout:
+    """Requeue a failed payout-paid email for delivery.
+
+    Only a ``paid`` payout whose notification is stored ``failed`` is
+    retryable; the row goes back to ``pending`` under a row lock and the
+    caller enqueues the send after this commit. ``sent``/``sending`` rows —
+    and payouts without a notification at all — are rejected with 409.
+    """
+    payout = await _lock_payout(db, payout.id)
+    if payout.status != "paid":
+        raise HTTPException(
+            status_code=409,
+            detail="Payout has no recorded payment notification",
+        )
+    result = await db.execute(
+        select(PayoutNotification)
+        .where(PayoutNotification.payout_id == payout.id)
+        .with_for_update()
+    )
+    notification = result.scalar_one_or_none()
+    if notification is None or notification.status != "failed":
+        raise HTTPException(
+            status_code=409,
+            detail="Payout notification is not in a retryable state",
+        )
+    now = datetime.now(timezone.utc)
+    notification.status = "pending"
+    notification.lease_expires_at = None
+    notification.last_error = None
+    notification.updated_at = now
+    await db.commit()
+    return await _load_payout_detail(db, payout.id)
+
+
 async def _verify_linked_commissions(
     db: AsyncSession, payout: Payout
 ) -> list[Commission]:

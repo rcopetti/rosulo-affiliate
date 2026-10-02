@@ -116,6 +116,21 @@ class PayoutCommissionDetailOut(BaseModel):
 
 PayoutStatus = Literal["pending_approval", "approved", "rejected", "paid"]
 
+PayoutNotificationStatus = Literal["pending", "sending", "sent", "failed"]
+
+
+class PayoutNotificationOut(BaseModel):
+    """Delivery state of the payout-paid email, exposed so merchants can see
+    and retry a failed send. ``last_error`` stays server-side: it can carry
+    provider internals that affiliates don't need."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: PayoutNotificationStatus
+    attempt_count: int
+    last_attempt_at: datetime | None = None
+    sent_at: datetime | None = None
+
 
 class PayoutOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -137,6 +152,7 @@ class PayoutOut(BaseModel):
     )
     payout_commissions: list[PayoutCommissionDetailOut] = Field(default_factory=list)
     payout_payment: PayoutPaymentOut | None = None
+    payout_notification: PayoutNotificationOut | None = None
     transitions: list[PayoutTransitionOut] = Field(default_factory=list)
 
     @model_validator(mode="after")

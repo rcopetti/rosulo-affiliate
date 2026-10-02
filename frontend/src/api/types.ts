@@ -166,6 +166,17 @@ export interface PayoutCommissionDetail {
   campaign_id?: string | null;
 }
 
+export type PayoutNotificationStatus = 'pending' | 'sending' | 'sent' | 'failed';
+
+/** Delivery state of the payout-paid email, exposed on the payout detail so
+ * merchants can spot and retry a failed send. */
+export interface PayoutNotification {
+  status: PayoutNotificationStatus;
+  attempt_count: number;
+  last_attempt_at?: string | null;
+  sent_at?: string | null;
+}
+
 export interface Payout {
   id: string;
   affiliate_id: string;
@@ -186,6 +197,7 @@ export interface Payout {
   earliest_sale_at?: string | null;
   latest_sale_at?: string | null;
   payout_payment?: PayoutPayment | null;
+  payout_notification?: PayoutNotification | null;
   transitions?: PayoutTransition[];
 }
 

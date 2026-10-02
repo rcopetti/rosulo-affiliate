@@ -15,6 +15,7 @@ interface PayoutQueueProps {
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onConfirmPayment: (id: string, details: PayoutPaymentConfirmation) => void;
+  onRetryNotification?: (id: string) => void;
 }
 
 function usePayoutDetail(id: string | null) {
@@ -29,7 +30,7 @@ function PayoutLoading() {
   return <p className="text-sm text-fg-muted">Loading…</p>;
 }
 
-export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: PayoutQueueProps) {
+export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment, onRetryNotification }: PayoutQueueProps) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [paidAt, setPaidAt] = useState('');
@@ -146,7 +147,7 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
           <PayoutLoading />
         ) : (
           <div className="space-y-4">
-            <PayoutDetail payout={detailPayout} />
+            <PayoutDetail payout={detailPayout} onRetryNotification={onRetryNotification} />
             {detailPayout.status === 'pending_approval' && (
               <div className="flex justify-end gap-2 border-t border-line pt-4">
                 <Button

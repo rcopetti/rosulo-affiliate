@@ -1,8 +1,8 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
-import { loginAffiliate } from '@/api/auth';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { affiliateReturnTenantId, loginAffiliate, safeAffiliateReturnTo, selectMerchant } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/Toast';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { setAuth } = useAuthStore();
   const toast = useToast();
   const {
@@ -22,14 +23,32 @@ export function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: loginAffiliate,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setAuth(data.token, data.account);
       localStorage.setItem('rosulo:tenants', JSON.stringify(data.tenants));
-      if (data.tenants.length === 1) {
+      const returnToParam = searchParams.get('returnTo');
+      // Honor a preserved deep link only when it is an affiliate payout
+      // path whose tenant_id matches a merchant this affiliate belongs to.
+      // The API still verifies ownership; the link selects nothing it
+      // couldn't already reach.
+      const returnTo = safeAffiliateReturnTo(
+        returnToParam,
+        data.tenants.map((tenant) => tenant.id)
+      );
+      if (returnTo) {
+        const tenantId = affiliateReturnTenantId(returnTo) as string;
+        await selectMerchant(tenantId).catch(() => undefined);
+        useAuthStore.getState().setTenant(tenantId);
+        navigate(returnTo);
+      } else if (data.tenants.length === 1) {
         useAuthStore.getState().setTenant(data.tenants[0].id);
         navigate('/affiliate/dashboard');
       } else {
-        navigate('/merchants');
+        navigate(
+          returnToParam
+            ? `/merchants?returnTo=${encodeURIComponent(returnToParam)}`
+            : '/merchants'
+        );
       }
     },
     onError: () => toast.add({ title: 'Login failed', description: 'Check your credentials', variant: 'error' }),

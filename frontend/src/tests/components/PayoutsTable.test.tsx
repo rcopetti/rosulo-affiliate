@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { Payout } from '@/api/types';
 import { PayoutsTable } from '@/components/affiliate/PayoutsTable';
@@ -26,10 +27,26 @@ const payout: Payout = {
   },
 };
 
+const renderTable = (payouts: Payout[]) =>
+  render(
+    <MemoryRouter>
+      <PayoutsTable payouts={payouts} />
+    </MemoryRouter>
+  );
+
 describe('PayoutsTable', () => {
   it('shows the manual transfer reference for a completed payout', () => {
-    render(<PayoutsTable payouts={[payout]} />);
+    renderTable([payout]);
 
     expect(screen.getByText('bank-tx-123')).toBeInTheDocument();
+  });
+
+  it('links each payout row to the affiliate payout detail page', () => {
+    renderTable([payout]);
+
+    expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute(
+      'href',
+      '/affiliate/payouts/payout-1'
+    );
   });
 });
