@@ -11,6 +11,9 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 ACTIVE_PAYOUT_STATUSES = ("pending_approval", "approved")
+_ACTIVE_PAYOUT_STATUS_LIST = ", ".join(
+    f"'{status}'" for status in ACTIVE_PAYOUT_STATUSES
+)
 
 # Sale events must carry the merchant-provided due date and the external
 # payment reference before commissions can derive `available_at` from them.
@@ -28,7 +31,7 @@ SALE_EVENTS_MISSING_DUE_DATE_SQL = (
 PAYOUTS_WITH_UNKNOWN_STATUS_SQL = (
     "SELECT 1 FROM payouts "
     "WHERE status IS NULL "
-    "OR status NOT IN ('pending_approval', 'approved', 'rejected', 'paid') "
+    f"OR status NOT IN ({_ACTIVE_PAYOUT_STATUS_LIST}, 'rejected', 'paid') "
     "LIMIT 1"
 )
 
@@ -47,7 +50,7 @@ COMMISSIONS_WITH_UNKNOWN_STATUS_SQL = (
 COMMISSIONS_WITH_MULTIPLE_ACTIVE_PAYOUTS_SQL = (
     "SELECT link.commission_id FROM payout_commissions AS link "
     "JOIN payouts AS payout ON payout.id = link.payout_id "
-    "WHERE payout.status IN ('pending_approval', 'approved') "
+    f"WHERE payout.status IN ({_ACTIVE_PAYOUT_STATUS_LIST}) "
     "GROUP BY link.commission_id "
     "HAVING COUNT(*) > 1 "
     "LIMIT 1"
@@ -68,7 +71,7 @@ BACKFILL_COMMISSION_AVAILABLE_AT_SQL = (
 BACKFILL_PAYOUT_COMMISSION_IS_ACTIVE_SQL = (
     "UPDATE payout_commissions SET is_active = TRUE FROM payouts "
     "WHERE payouts.id = payout_commissions.payout_id "
-    "AND payouts.status IN ('pending_approval', 'approved')"
+    f"AND payouts.status IN ({_ACTIVE_PAYOUT_STATUS_LIST})"
 )
 
 

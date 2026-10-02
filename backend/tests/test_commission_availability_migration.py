@@ -139,6 +139,28 @@ async def test_preflight_rejects_commission_linked_to_two_active_payouts():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("active_status", ["pending_approval", "approved"])
+@pytest.mark.parametrize("closed_status", ["paid", "rejected"])
+async def test_preflight_accepts_commission_linked_to_one_active_and_one_closed_payout(
+    active_status,
+    closed_status,
+):
+    async with async_session() as session:
+        tenant, affiliate, commission = await _create_sale_commission(session)
+        active = await _create_payout(session, affiliate, tenant, status=active_status)
+        closed = await _create_payout(session, affiliate, tenant, status=closed_status)
+        session.add_all(
+            [
+                PayoutCommission(payout_id=active.id, commission_id=commission.id),
+                PayoutCommission(payout_id=closed.id, commission_id=commission.id),
+            ]
+        )
+        await session.commit()
+
+    await _run_preflight()
+
+
+@pytest.mark.asyncio
 async def test_preflight_rejects_legacy_payout_status():
     async with async_session() as session:
         tenant, affiliate, _ = await _create_sale_commission(session)
@@ -180,3 +202,9 @@ def test_commission_availability_model_contract():
         if idx.name == "uq_payout_commissions_active_commission"
     )
     assert index.unique is True
+
+    where_clause = index.dialect_options["postgresql"]["where"]
+    assert where_clause is not None
+    assert "is_active" in str(
+        where_clause.compile(compile_kwargs={"literal_binds": True})
+    )
