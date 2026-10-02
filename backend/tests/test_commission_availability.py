@@ -63,6 +63,42 @@ async def test_maturity_skips_commissions_with_active_reservation_flag(payout_sc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payout_status", ["rejected", "paid"])
+async def test_maturity_promotes_commission_with_released_reservation(
+    payout_scenario, payout_status
+):
+    """A released reservation — an inactive link whose parent payout is
+    already closed — must not block promotion of a due commission."""
+    released_id = await payout_scenario.create_commission(
+        date(2026, 10, 1), f"payment-released-{payout_status}"
+    )
+    await payout_scenario.add_legacy_active_payout(
+        released_id, payout_status=payout_status, is_active=False
+    )
+
+    async with payout_scenario.db_session() as db:
+        promoted = await mature_due_commissions(db, now_utc=JUST_AFTER_DUE)
+
+    assert promoted == 1
+    assert await payout_scenario.commission_status(released_id) == "available"
+
+
+@pytest.mark.asyncio
+async def test_maturity_promotes_commission_due_exactly_at_now(payout_scenario):
+    """A commission whose available_at equals now_utc is due: the cutoff is
+    inclusive (``available_at <= now_utc``)."""
+    boundary_id = await payout_scenario.create_commission(
+        date(2026, 10, 1), "payment-boundary-1", available_at=JUST_AFTER_DUE
+    )
+
+    async with payout_scenario.db_session() as db:
+        promoted = await mature_due_commissions(db, now_utc=JUST_AFTER_DUE)
+
+    assert promoted == 1
+    assert await payout_scenario.commission_status(boundary_id) == "available"
+
+
+@pytest.mark.asyncio
 async def test_maturity_is_idempotent_across_repeated_runs(payout_scenario):
     due_id = await payout_scenario.create_commission(date(2026, 10, 1), "payment-repeat-1")
     future_id = await payout_scenario.create_commission(date(2026, 10, 2), "payment-repeat-2")
@@ -114,8 +150,9 @@ async def test_maturity_backfills_null_available_at_from_event_good_date(
 
 @pytest.mark.asyncio
 async def test_maturity_leaves_non_pending_statuses_untouched(payout_scenario):
+    ids_by_status = {}
     for status in ("available", "reserved", "paid", "reversed"):
-        await payout_scenario.create_commission(
+        ids_by_status[status] = await payout_scenario.create_commission(
             date(2026, 10, 1), f"payment-{status}-1", status=status
         )
 
@@ -123,3 +160,5 @@ async def test_maturity_leaves_non_pending_statuses_untouched(payout_scenario):
         promoted = await mature_due_commissions(db, now_utc=JUST_AFTER_DUE)
 
     assert promoted == 0
+    for status, commission_id in ids_by_status.items():
+        assert await payout_scenario.commission_status(commission_id) == status

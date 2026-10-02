@@ -1,7 +1,6 @@
 import os
 import types
 import uuid
-from datetime import datetime, timezone
 from decimal import Decimal
 
 import asyncpg
@@ -34,6 +33,7 @@ from app.db.base import Base
 from app.db.models import Commission, Event, Payout, PayoutCommission, Tenant, TenantUser
 from app.db.session import async_session, engine
 from app.main import app
+from app.services.commission import utc_midnight
 
 
 def _pg_dsn(url):
@@ -143,6 +143,7 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"email": "payout-scenario@example.com"},
     )
+    assert invite.status_code == 200
     invite_token = invite.json()["token"]
 
     accept = await client.post(
@@ -157,6 +158,7 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
             "paypal_email": "payout-scenario@example.com",
         },
     )
+    assert accept.status_code == 200
     token = accept.json()["token"]
 
     affiliates = await client.get(
@@ -173,6 +175,7 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
         json={"name": "Payout Scenario Camp", "landing_url": "https://allbum.me/ps"},
     )
+    assert camp.status_code == 200
     campaign_id = uuid.UUID(camp.json()["id"])
 
     monkeypatch.setattr(
@@ -189,6 +192,7 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
         data={"type": "W-9"},
         files={"file": ("w9.pdf", b"tax document", "application/pdf")},
     )
+    assert uploaded.status_code == 200
     document_id = uploaded.json()["id"]
     reviewed = await client.post(
         f"/api/v1/admin/affiliates/{affiliate_id}/documents/{document_id}/review",
@@ -212,9 +216,7 @@ async def payout_scenario(client, tenant, tenant_user, monkeypatch):
         that left the column null.
         """
         if available_at == "auto":
-            available_at = datetime(
-                good_date.year, good_date.month, good_date.day, tzinfo=timezone.utc
-            )
+            available_at = utc_midnight(good_date)
         if available_on is None:
             available_on = good_date
         async with async_session() as db:

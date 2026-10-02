@@ -19,6 +19,11 @@ from app.services.contract import get_contract_for_affiliate
 from app.services.tax import apply_tax
 
 
+def utc_midnight(d: date) -> datetime:
+    """Return the UTC-midnight instant a merchant due date becomes available."""
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
+
 async def calculate_from_sale_event(
     db: AsyncSession, event: Event, affiliate: Affiliate
 ) -> Commission | None:
@@ -92,12 +97,7 @@ async def calculate_from_sale_event(
         currency=event.currency,
         status="pending",
         available_on=event.good_date,
-        available_at=datetime(
-            event.good_date.year,
-            event.good_date.month,
-            event.good_date.day,
-            tzinfo=timezone.utc,
-        ),
+        available_at=utc_midnight(event.good_date),
     )
     db.add(commission)
     await db.commit()
@@ -138,7 +138,14 @@ async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = No
     result = await db.execute(
         select(Commission, Event)
         .join(Event, Event.id == Commission.event_id)
-        .where(Commission.status == "pending", ~active_reservation)
+        .where(
+            Commission.status == "pending",
+            or_(
+                Commission.available_at <= now_utc,
+                Commission.available_at.is_(None),
+            ),
+            ~active_reservation,
+        )
         .order_by(Commission.id)
         .with_for_update(of=Commission, skip_locked=True)
     )
@@ -148,12 +155,7 @@ async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = No
         if due_at is None:
             if event.good_date is None:
                 continue
-            due_at = datetime(
-                event.good_date.year,
-                event.good_date.month,
-                event.good_date.day,
-                tzinfo=timezone.utc,
-            )
+            due_at = utc_midnight(event.good_date)
             commission.available_at = due_at
             commission.available_on = event.good_date
         if due_at <= now_utc:
