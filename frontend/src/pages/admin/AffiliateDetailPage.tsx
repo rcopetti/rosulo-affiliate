@@ -205,6 +205,20 @@ export function AffiliateDetailPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Tax classification</CardTitle>
+        </CardHeader>
+        <dl className="divide-y divide-line">
+          {taxDetails.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="text-sm text-fg-muted">{row.label}</dt>
+              <dd className="text-sm font-medium text-fg">{row.value?.trim() ? row.value : '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Tax documents</CardTitle>
         </CardHeader>
         {data.documents?.length ? (
@@ -292,20 +306,6 @@ export function AffiliateDetailPage() {
             )}
           </div>
         )}
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Tax classification</CardTitle>
-        </CardHeader>
-        <dl className="divide-y divide-line">
-          {taxDetails.map((row) => (
-            <div key={row.label} className="flex items-center justify-between gap-4 py-2.5">
-              <dt className="text-sm text-fg-muted">{row.label}</dt>
-              <dd className="text-sm font-medium text-fg">{row.value?.trim() ? row.value : '—'}</dd>
-            </div>
-          ))}
-        </dl>
       </Card>
 
       <Card>
