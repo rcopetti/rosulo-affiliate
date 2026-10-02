@@ -1,5 +1,7 @@
 import { FormEvent, useState } from 'react';
-import { Payout, PayoutPaymentConfirmation } from '@/api/types';
+import { useQuery } from '@tanstack/react-query';
+import { getAdminPayout } from '@/api/admin/payouts';
+import { PayoutPaymentConfirmation, PayoutQueueItem } from '@/api/types';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { PayoutDetail } from '@/components/admin/PayoutDetail';
@@ -9,20 +11,38 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 
 interface PayoutQueueProps {
-  payouts: Payout[];
+  payouts: PayoutQueueItem[];
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onConfirmPayment: (id: string, details: PayoutPaymentConfirmation) => void;
 }
 
+function usePayoutDetail(id: string | null) {
+  return useQuery({
+    queryKey: ['admin-payout', id],
+    queryFn: () => getAdminPayout(id as string),
+    enabled: id !== null,
+  });
+}
+
+function PayoutLoading() {
+  return <p className="text-sm text-fg-muted">Loading…</p>;
+}
+
 export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: PayoutQueueProps) {
-  const [detailPayout, setDetailPayout] = useState<Payout | null>(null);
-  const [paymentPayout, setPaymentPayout] = useState<Payout | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
   const [paidAt, setPaidAt] = useState('');
   const [transferReference, setTransferReference] = useState('');
 
+  // Modals always load the full payout by id: the queue row is intentionally
+  // sparse (the dashboard feeds a lean projection), and fetching fresh detail
+  // keeps the modal honest if the row changed since it was rendered.
+  const { data: detailPayout, isLoading: detailLoading } = usePayoutDetail(detailId);
+  const { data: paymentPayout, isLoading: paymentLoading } = usePayoutDetail(paymentId);
+
   const closePayment = () => {
-    setPaymentPayout(null);
+    setPaymentId(null);
     setPaidAt('');
     setTransferReference('');
   };
@@ -34,23 +54,27 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
 
   const confirmPayment = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!paymentPayout || !paidAtDate || !paidAtValid || !transferReference.trim()) return;
+    if (!paymentId || !paidAtDate || !paidAtValid || !transferReference.trim()) return;
     // datetime-local yields a browser-local time; submit it as an ISO-8601
     // timestamp with an explicit offset. Amount, currency, method, and
     // commission membership stay server-derived.
-    onConfirmPayment(paymentPayout.id, {
+    onConfirmPayment(paymentId, {
       paid_at: paidAtDate.toISOString(),
       transfer_reference: transferReference.trim(),
     });
     closePayment();
   };
 
-  const columns: Column<Payout>[] = [
+  const columns: Column<PayoutQueueItem>[] = [
     {
       key: 'requested_at',
       header: 'Requested',
-      render: (p) => <span className="whitespace-nowrap text-xs">{formatDateTime(p.requested_at)}</span>,
-      sortValue: (p) => new Date(p.requested_at).getTime(),
+      render: (p) => (
+        <span className="whitespace-nowrap text-xs">
+          {p.requested_at ? formatDateTime(p.requested_at) : '—'}
+        </span>
+      ),
+      sortValue: (p) => (p.requested_at ? new Date(p.requested_at).getTime() : 0),
       headerClassName: 'w-44',
     },
     {
@@ -78,22 +102,21 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
       header: 'Actions',
       render: (p) => (
         <div className="flex gap-2">
-          {p.status === 'pending_approval' && (
-            <Button size="sm" onClick={() => setDetailPayout(p)}>
-              Review
-            </Button>
-          )}
           {p.status === 'approved' && (
             <Button
               size="sm"
               aria-label={`Record payment for payout ${p.id}`}
-              onClick={() => setPaymentPayout(p)}
+              onClick={() => setPaymentId(p.id)}
             >
               Record payment
             </Button>
           )}
-          {(p.status === 'paid' || p.status === 'rejected') && (
-            <Button variant="secondary" size="sm" onClick={() => setDetailPayout(p)}>
+          {p.status === 'pending_approval' ? (
+            <Button size="sm" onClick={() => setDetailId(p.id)}>
+              Review
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={() => setDetailId(p.id)}>
               View
             </Button>
           )}
@@ -114,12 +137,14 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
       />
 
       <Modal
-        open={detailPayout !== null}
-        onClose={() => setDetailPayout(null)}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
         title="Payout detail"
         className="max-w-3xl"
       >
-        {detailPayout && (
+        {detailLoading || !detailPayout ? (
+          <PayoutLoading />
+        ) : (
           <div className="space-y-4">
             <PayoutDetail payout={detailPayout} />
             {detailPayout.status === 'pending_approval' && (
@@ -128,7 +153,7 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
                   variant="danger"
                   onClick={() => {
                     onReject(detailPayout.id);
-                    setDetailPayout(null);
+                    setDetailId(null);
                   }}
                 >
                   Reject
@@ -136,7 +161,7 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
                 <Button
                   onClick={() => {
                     onApprove(detailPayout.id);
-                    setDetailPayout(null);
+                    setDetailId(null);
                   }}
                 >
                   Approve
@@ -148,11 +173,13 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment }: 
       </Modal>
 
       <Modal
-        open={paymentPayout !== null}
+        open={paymentId !== null}
         onClose={closePayment}
         title="Record PayPal payment"
       >
-        {paymentPayout && (
+        {paymentLoading || !paymentPayout ? (
+          <PayoutLoading />
+        ) : (
           <form className="space-y-4" onSubmit={confirmPayment}>
             <p className="text-sm text-fg-muted">
               Confirm the PayPal transfer for this payout. Amount, currency, method, and

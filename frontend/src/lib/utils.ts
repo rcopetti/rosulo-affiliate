@@ -10,7 +10,14 @@ export function formatCurrency(amount: number, currency = 'USD', locale = 'en-US
 }
 
 export function formatDate(date: string | Date, locale = 'en-US') {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  // Date-only strings ("YYYY-MM-DD") parse as UTC midnight; interpret them as
+  // local calendar dates so the displayed day matches the merchant's date.
+  const d =
+    typeof date === 'string'
+      ? /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? new Date(`${date}T00:00:00`)
+        : new Date(date)
+      : date;
   return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: '2-digit' }).format(d);
 }
 

@@ -4,8 +4,9 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.db.models import Campaign, Commission, Event, Payout
+from app.db.models import Affiliate, Campaign, Commission, Event, Payout
 from app.services import affiliate as affiliate_service
 from app.services.balance import add_legacy_balance_fields, get_balances
 
@@ -127,7 +128,9 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
 
     # Pending payouts
     payouts_result = await db.execute(
-        select(Payout).where(
+        select(Payout)
+        .options(selectinload(Payout.affiliate).selectinload(Affiliate.account))
+        .where(
             Payout.tenant_id == tenant_id,
             Payout.status == "pending_approval",
         )
@@ -140,6 +143,7 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
             "status": p.status,
             "requested_at": p.requested_at.isoformat() if p.requested_at else None,
             "affiliate_id": str(p.affiliate_id),
+            "affiliate": {"name": p.affiliate.account.name} if p.affiliate else None,
         }
         for p in payouts_result.scalars().all()
     ]

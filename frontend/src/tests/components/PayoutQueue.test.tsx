@@ -1,7 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import { Payout } from '@/api/types';
+import { Payout, PayoutQueueItem } from '@/api/types';
+import { getAdminPayout } from '@/api/admin/payouts';
 import { PayoutQueue } from '@/components/admin/PayoutQueue';
+
+vi.mock('@/api/admin/payouts', () => ({ getAdminPayout: vi.fn() }));
 
 const approvedPayout: Payout = {
   id: 'payout-1',
@@ -52,26 +56,45 @@ const approvedPayout: Payout = {
 
 const pendingPayout: Payout = { ...approvedPayout, id: 'payout-2', status: 'pending_approval' };
 
-function renderQueue(payout: Payout, overrides: Partial<Parameters<typeof PayoutQueue>[0]> = {}) {
+const sparseQueueRow: PayoutQueueItem = {
+  id: 'payout-2',
+  affiliate_id: 'affiliate-1',
+  requested_amount: 100,
+  currency: 'USD',
+  status: 'pending_approval',
+  requested_at: '2026-10-01T00:00:00Z',
+  affiliate: { name: 'Ada Affiliate' },
+};
+
+function renderQueue(
+  row: PayoutQueueItem,
+  detail: Payout,
+  overrides: Partial<Parameters<typeof PayoutQueue>[0]> = {}
+) {
   const props = {
-    payouts: [payout],
+    payouts: [row],
     onApprove: vi.fn(),
     onReject: vi.fn(),
     onConfirmPayment: vi.fn(),
     ...overrides,
   };
-  render(<PayoutQueue {...props} />);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.mocked(getAdminPayout).mockResolvedValue(detail);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <PayoutQueue {...props} />
+    </QueryClientProvider>
+  );
   return props;
 }
 
 describe('PayoutQueue', () => {
-  it('shows the payee identity, net amount, and commission count in the payment modal', () => {
-    renderQueue(approvedPayout);
+  it('shows the payee identity, net amount, and commission count in the payment modal', async () => {
+    renderQueue(approvedPayout, approvedPayout);
 
     fireEvent.click(screen.getByRole('button', { name: /record payment/i }));
 
-    expect(screen.getAllByText('Ada Affiliate').length).toBeGreaterThan(0);
-    expect(screen.getByText('ada@example.com')).toBeInTheDocument();
+    expect(await screen.findByText('ada@example.com')).toBeInTheDocument();
     expect(screen.getByText('ada-paypal@example.com')).toBeInTheDocument();
     expect(screen.getAllByText('$100.00').length).toBeGreaterThan(0);
     expect(screen.getByText(/2\s*commissions/)).toBeInTheDocument();
@@ -81,12 +104,12 @@ describe('PayoutQueue', () => {
     expect(screen.queryByLabelText(/^currency$/i)).not.toBeInTheDocument();
   });
 
-  it('confirms an approved payout with only a paid datetime and PayPal reference', () => {
+  it('confirms an approved payout with only a paid datetime and PayPal reference', async () => {
     const onConfirmPayment = vi.fn();
-    renderQueue(approvedPayout, { onConfirmPayment });
+    renderQueue(approvedPayout, approvedPayout, { onConfirmPayment });
 
     fireEvent.click(screen.getByRole('button', { name: /record payment/i }));
-    fireEvent.change(screen.getByLabelText(/Paid at/), {
+    fireEvent.change(await screen.findByLabelText(/Paid at/), {
       target: { value: '2026-09-30T10:30' },
     });
     fireEvent.change(screen.getByLabelText(/PayPal transaction reference/), {
@@ -101,11 +124,11 @@ describe('PayoutQueue', () => {
     });
   });
 
-  it('blocks confirmation when the datetime or reference is blank', () => {
-    renderQueue(approvedPayout);
+  it('blocks confirmation when the datetime or reference is blank', async () => {
+    renderQueue(approvedPayout, approvedPayout);
 
     fireEvent.click(screen.getByRole('button', { name: /record payment/i }));
-    const confirm = screen.getByRole('button', { name: /confirm payment/i });
+    const confirm = await screen.findByRole('button', { name: /confirm payment/i });
     expect(confirm).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Paid at/), {
@@ -119,16 +142,19 @@ describe('PayoutQueue', () => {
     expect(confirm).toBeEnabled();
   });
 
-  it('opens the itemized detail for pending payouts before approval or rejection', () => {
+  it('fetches and opens the itemized detail for a sparse dashboard row', async () => {
     const onApprove = vi.fn();
     const onReject = vi.fn();
-    renderQueue(pendingPayout, { onApprove, onReject });
+    renderQueue(sparseQueueRow, pendingPayout, { onApprove, onReject });
 
     fireEvent.click(screen.getByRole('button', { name: /review/i }));
 
-    // Payee identity, commission count, totals, and the source-sale window.
-    expect(screen.getAllByText('Ada Affiliate').length).toBeGreaterThan(0);
-    expect(screen.getByText('ada-paypal@example.com')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(vi.mocked(getAdminPayout)).toHaveBeenCalledWith('payout-2')
+    );
+    // Payee identity, commission count, totals, and the source-sale window —
+    // none of these exist on the sparse row, they come from the fetched detail.
+    expect(await screen.findByText('ada-paypal@example.com')).toBeInTheDocument();
     expect(screen.getByText(/2\s*commissions/)).toBeInTheDocument();
     expect(screen.getAllByText('$100.00').length).toBeGreaterThan(0);
     expect(screen.getByText(/sales from/)).toBeInTheDocument();
@@ -138,13 +164,22 @@ describe('PayoutQueue', () => {
     expect(onReject).not.toHaveBeenCalled();
   });
 
-  it('rejects a pending payout from the detail review', () => {
+  it('rejects a pending payout from the detail review', async () => {
     const onReject = vi.fn();
-    renderQueue(pendingPayout, { onReject });
+    renderQueue(pendingPayout, pendingPayout, { onReject });
 
     fireEvent.click(screen.getByRole('button', { name: /review/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^reject$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^reject$/i }));
 
     expect(onReject).toHaveBeenCalledWith('payout-2');
+  });
+
+  it('lets an approved payout be re-inspected before payment is recorded', async () => {
+    renderQueue(approvedPayout, approvedPayout);
+
+    fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+
+    expect(await screen.findByText(/2\s*commissions/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument();
   });
 });

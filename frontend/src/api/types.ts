@@ -189,6 +189,18 @@ export interface Payout {
   transitions?: PayoutTransition[];
 }
 
+// Sparse queue-row shape served by the admin dashboard; the full `Payout`
+// also satisfies it so list endpoints can feed the same component.
+export interface PayoutQueueItem {
+  id: string;
+  affiliate_id?: string;
+  requested_amount: number;
+  currency: string;
+  status: PayoutStatus;
+  requested_at: string | null;
+  affiliate?: Pick<PayoutPayee, 'name'> | null;
+}
+
 export interface PayoutRequestPayload {
   currency: string;
   commission_ids?: string[];
@@ -262,5 +274,5 @@ export interface AdminDashboard {
   campaign_performance: { campaign_id: string; name: string; clicks: number; leads: number; sales: number }[];
   affiliates: Affiliate[];
   commission_liability: { period: string; gross: number; tax_retained: number; currency: string }[];
-  payout_queue: Payout[];
+  payout_queue: PayoutQueueItem[];
 }

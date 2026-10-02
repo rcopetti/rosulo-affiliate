@@ -37,6 +37,8 @@ export function AdminDashboardPage() {
     mutationFn: approvePayout,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
       toast.add({ title: 'Payout approved', variant: 'success' });
     },
     onError: () => toast.add({ title: 'Error', description: 'Could not approve payout', variant: 'error' }),
@@ -46,6 +48,8 @@ export function AdminDashboardPage() {
     mutationFn: rejectPayout,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
       toast.add({ title: 'Payout rejected', variant: 'success' });
     },
     onError: () => toast.add({ title: 'Error', description: 'Could not reject payout', variant: 'error' }),
@@ -56,6 +60,8 @@ export function AdminDashboardPage() {
       confirmPayoutPayment(id, details),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
       toast.add({ title: 'Payment recorded', variant: 'success' });
     },
     onError: () => toast.add({ title: 'Error', description: 'Could not record payment', variant: 'error' }),
