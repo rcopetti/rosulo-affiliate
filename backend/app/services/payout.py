@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 
 from app.core.money import is_supported_currency, normalize_currency_code, quantize_ledger_amount
 from app.db.models import (
@@ -400,7 +400,7 @@ async def list_payouts(db: AsyncSession, tenant: Tenant):
 
 
 def _rolling_year_start(now: datetime) -> datetime:
-    """The same UTC date one year before ``now``.
+    """The same UTC instant one year before ``now``.
 
     Replacing the year fails on February 29 when the prior year is not a
     leap year; the convention then is February 28.
@@ -439,7 +439,14 @@ async def list_affiliate_payout_history(
     result = await db.execute(
         select(Payout)
         .where(*filters)
-        .options(selectinload(Payout.payout_payment))
+        .options(
+            selectinload(Payout.payout_payment),
+            noload(Payout.affiliate),
+            noload(Payout.payout_commissions),
+            noload(Payout.payment_record),
+            noload(Payout.payout_notification),
+            noload(Payout.transitions),
+        )
         .order_by(Payout.requested_at.desc(), Payout.id)
         .offset(offset)
         .limit(limit)

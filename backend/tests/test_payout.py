@@ -26,7 +26,7 @@ from app.db.session import async_session
 from app.queue.handlers import handle_payout
 from app.schemas.payout import PayoutPaymentConfirmation, PayoutRequest
 from app.services.commission import mature_due_commissions, utc_midnight
-from app.services.payout import request_payout
+from app.services.payout import _rolling_year_start, request_payout
 
 
 def test_payout_request_rejects_empty_commission_ids():
@@ -1269,13 +1269,13 @@ async def test_payout_detail_hides_other_tenants_payout(
     assert foreign.status_code == 404
 
 
-def _rolling_year_start(now: datetime) -> datetime:
-    """One year before ``now``: same date last year, or Feb 28 when the
-    prior year has no Feb 29."""
-    try:
-        return now.replace(year=now.year - 1)
-    except ValueError:
-        return now.replace(year=now.year - 1, day=28)
+def test_rolling_year_start_handles_leap_day():
+    assert _rolling_year_start(datetime(2028, 2, 29, 12, 0, tzinfo=timezone.utc)) == datetime(
+        2027, 2, 28, 12, 0, tzinfo=timezone.utc
+    )
+    assert _rolling_year_start(datetime(2026, 10, 1, 8, 30, tzinfo=timezone.utc)) == datetime(
+        2025, 10, 1, 8, 30, tzinfo=timezone.utc
+    )
 
 
 async def _seed_payout(

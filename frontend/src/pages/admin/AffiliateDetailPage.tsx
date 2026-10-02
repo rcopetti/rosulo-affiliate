@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { PencilLine } from 'lucide-react';
 import { getAffiliate, getAffiliatePayouts, reviewAffiliateDocument, viewAffiliateDocument } from '@/api/admin/affiliates';
@@ -28,6 +28,7 @@ export function AffiliateDetailPage() {
   useEffect(() => () => {
     if (documentPreviewUrl) URL.revokeObjectURL(documentPreviewUrl);
   }, [documentPreviewUrl]);
+  useEffect(() => setPayoutOffset(0), [id]);
   const { data, isLoading } = useQuery({
     queryKey: ['admin-affiliate', id],
     queryFn: () => getAffiliate(id!),
@@ -39,11 +40,12 @@ export function AffiliateDetailPage() {
     enabled: !!id,
     retry: false,
   });
-  const { data: payoutHistory } = useQuery({
+  const { data: payoutHistory, isError: payoutHistoryError } = useQuery({
     queryKey: ['admin-affiliate-payouts', id, payoutOffset],
     queryFn: () => getAffiliatePayouts(id!, { limit: PAYOUT_PAGE_SIZE, offset: payoutOffset }),
     enabled: !!id,
     retry: false,
+    placeholderData: keepPreviousData,
   });
 
   const review = useMutation({
@@ -120,7 +122,9 @@ export function AffiliateDetailPage() {
         <CardHeader>
           <CardTitle>Payout history</CardTitle>
         </CardHeader>
-        {payoutHistory === undefined ? (
+        {payoutHistoryError ? (
+          <p className="text-sm text-fg-muted">Could not load payout history.</p>
+        ) : payoutHistory === undefined ? (
           <p className="text-sm text-fg-muted">Loading payouts…</p>
         ) : (
           <>
