@@ -120,7 +120,7 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment, on
               aria-label={`Record payment for payout ${p.id}`}
               onClick={() => setPaymentId(p.id)}
             >
-              Record payment
+              Payment
             </Button>
           )}
           {p.status === 'pending_approval' ? (
