@@ -117,6 +117,46 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
     sales_volume = {row["currency"]: row["amount"] for row in a_dash.json()["sales_volume"]}
     assert sales_volume == {"USD": 10.0, "EUR": 10.0}
 
+    # A sale on a second campaign must be excluded when filtering by campaign
+    camp_b = await client.post(
+        "/api/v1/affiliate/campaigns",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+        json={"name": "Dash Camp B", "landing_url": "https://allbum.me/db"},
+    )
+    campaign_b_id = camp_b.json()["id"]
+    response = await client.post(
+        "/api/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "event_id": "dash-sale-usd-b",
+            "type": "sale",
+            "campaign_id": campaign_b_id,
+            "customer_id": "customer-usd-b",
+            "amount": 200.0,
+            "currency": "USD",
+            "payment_sequence": 1,
+            "good_date": str(date.today()),
+            "payment_record_id": "pay-dash-sale-usd-b",
+        },
+    )
+    assert response.status_code == 200
+
+    filtered = await client.get(
+        "/api/v1/affiliate/dashboard",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+        params={"campaign_id": campaign_id},
+    )
+    assert filtered.status_code == 200
+    filtered_volume = {
+        row["currency"]: row["amount"] for row in filtered.json()["sales_volume"]
+    }
+    assert filtered_volume == {"USD": 10.0, "EUR": 10.0}
+    filtered_sequence = {
+        row["currency"]: row["amount"]
+        for row in filtered.json()["sales_by_sequence"]
+    }
+    assert filtered_sequence == {"USD": 10.0, "EUR": 10.0}
+
     t_dash = await client.get(
         "/api/v1/admin/dashboard",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -127,7 +167,7 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
         row["currency"]: row for row in t_dash.json()["commission_liability"]
     }
     assert set(liability_by_currency) == {"USD", "EUR"}
-    assert liability_by_currency["USD"]["gross"] == 10.0
+    assert liability_by_currency["USD"]["gross"] == 30.0
     assert liability_by_currency["EUR"]["gross"] == 10.0
 
 

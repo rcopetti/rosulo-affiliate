@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_current_affiliate
@@ -14,5 +16,6 @@ router = APIRouter()
 async def affiliate_dashboard(
     affiliate: Affiliate = Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
+    campaign_id: UUID | None = Query(None),
 ):
-    return await dashboard_service.affiliate_dashboard(db, affiliate.id)
+    return await dashboard_service.affiliate_dashboard(db, affiliate.id, campaign_id)

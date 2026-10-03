@@ -56,7 +56,7 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
     ]
 
     # Sales by sequence
-    sales = await db.execute(
+    sequence_query = (
         select(
             Event.payment_sequence,
             Commission.currency,
@@ -67,6 +67,9 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
         .where(Event.affiliate_id == affiliate_id)
         .group_by(Event.payment_sequence, Commission.currency)
     )
+    if campaign_id:
+        sequence_query = sequence_query.where(Event.campaign_id == campaign_id)
+    sales = await db.execute(sequence_query)
     sales_by_sequence = [
         {
             "sequence": int(seq or 1),
