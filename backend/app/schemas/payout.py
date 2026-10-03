@@ -103,6 +103,13 @@ class PayoutCommissionDetailOut(BaseModel):
     payment_sequence: int | None = Field(
         default=None, validation_alias=AliasPath("commission", "event", "payment_sequence")
     )
+    sale_amount: float | None = Field(
+        default=None, validation_alias=AliasPath("commission", "event", "amount")
+    )
+    sale_payment_record_id: str | None = Field(
+        default=None,
+        validation_alias=AliasPath("commission", "event", "payment_record_id"),
+    )
     gross_amount: float = Field(validation_alias=AliasPath("commission", "gross_amount"))
     withholding_amount: float = Field(
         validation_alias=AliasPath("commission", "withholding_amount")
@@ -112,6 +119,14 @@ class PayoutCommissionDetailOut(BaseModel):
     campaign_id: uuid.UUID | None = Field(
         default=None, validation_alias=AliasPath("commission", "campaign_id")
     )
+
+    @computed_field
+    @property
+    def rate_percent(self) -> float | None:
+        """Commission gross as a share of the source sale amount."""
+        if not self.sale_amount:
+            return None
+        return round(self.gross_amount / self.sale_amount * 100, 2)
 
 
 PayoutStatus = Literal["pending_approval", "approved", "rejected", "paid"]
@@ -191,3 +206,14 @@ class PayoutOut(BaseModel):
             if line.occurred_at is not None
         ]
         return max(times, default=None)
+
+    @computed_field
+    @property
+    def total_sale_amount(self) -> float | None:
+        """Revenue generated for the merchant by the linked source sales."""
+        amounts = [
+            line.sale_amount
+            for line in self.payout_commissions
+            if line.sale_amount is not None
+        ]
+        return sum(amounts) if amounts else None

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { Payout } from '@/api/types';
 import { PayoutStatusBadge } from '@/components/shared/PayoutStatusBadge';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +12,36 @@ interface PayoutDetailProps {
    * notification email. Omit to hide the action entirely. */
   onRetryNotification?: (id: string) => void;
   isRetryPending?: boolean;
+}
+
+function CopyPaymentRef({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable; the value remains selectable.
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={`Copy payment reference ${value}`}
+      title={value}
+      className="inline-flex cursor-pointer items-center rounded p-1 text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+    </button>
+  );
 }
 
 const NOTIFICATION_LABELS: Record<string, string> = {
@@ -25,6 +57,7 @@ export function PayoutDetail({ payout, onRetryNotification, isRetryPending }: Pa
   const grossTotal = lines.reduce((sum, line) => sum + line.gross_amount, 0);
   const withholdingTotal = lines.reduce((sum, line) => sum + line.withholding_amount, 0);
   const netTotal = lines.reduce((sum, line) => sum + line.net_amount, 0);
+  const saleTotal = payout.total_sale_amount ?? null;
 
   return (
     <div className="space-y-4 text-sm text-slate-700">
@@ -48,7 +81,13 @@ export function PayoutDetail({ payout, onRetryNotification, isRetryPending }: Pa
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-md bg-surface-muted p-3">
+          <p className="text-xs text-fg-muted">Sales total</p>
+          <p className="font-medium">
+            {saleTotal != null ? formatCurrency(saleTotal, payout.currency) : '—'}
+          </p>
+        </div>
         <div className="rounded-md bg-surface-muted p-3">
           <p className="text-xs text-fg-muted">Gross</p>
           <p className="font-medium">{formatCurrency(payout.approved_amount, payout.currency)}</p>
@@ -77,9 +116,12 @@ export function PayoutDetail({ payout, onRetryNotification, isRetryPending }: Pa
           <TableHead>
             <TableRow>
               <TableHeader>Sale date</TableHeader>
+              <TableHeader>Payment ref</TableHeader>
               <TableHeader>Good date</TableHeader>
               <TableHeader>Seq</TableHeader>
+              <TableHeader className="text-right">Sale amount</TableHeader>
               <TableHeader className="text-right">Gross</TableHeader>
+              <TableHeader className="text-right">Rate</TableHeader>
               <TableHeader className="text-right">Withholding</TableHeader>
               <TableHeader className="text-right">Net</TableHeader>
             </TableRow>
@@ -90,12 +132,31 @@ export function PayoutDetail({ payout, onRetryNotification, isRetryPending }: Pa
                 <TableCell className="whitespace-nowrap">
                   {line.occurred_at ? formatDateTime(line.occurred_at) : '—'}
                 </TableCell>
+                <td
+                  className="max-w-32 px-4 py-3 font-mono text-xs text-fg"
+                  title={line.sale_payment_record_id ?? undefined}
+                >
+                  {line.sale_payment_record_id ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="max-w-20 truncate">{line.sale_payment_record_id}</span>
+                      <CopyPaymentRef value={line.sale_payment_record_id} />
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <TableCell className="whitespace-nowrap">
                   {line.good_date ? formatDate(line.good_date) : '—'}
                 </TableCell>
                 <TableCell>{line.payment_sequence ?? '—'}</TableCell>
                 <TableCell className="text-right whitespace-nowrap">
+                  {line.sale_amount != null ? formatCurrency(line.sale_amount, line.currency) : '—'}
+                </TableCell>
+                <TableCell className="text-right whitespace-nowrap">
                   {formatCurrency(line.gross_amount, line.currency)}
+                </TableCell>
+                <TableCell className="text-right whitespace-nowrap">
+                  {line.rate_percent != null ? `${line.rate_percent}%` : '—'}
                 </TableCell>
                 <TableCell className="text-right whitespace-nowrap">
                   {formatCurrency(line.withholding_amount, line.currency)}
@@ -107,12 +168,16 @@ export function PayoutDetail({ payout, onRetryNotification, isRetryPending }: Pa
             ))}
             {lines.length > 0 && (
               <TableRow>
-                <td colSpan={3} className="px-4 py-3 text-sm font-medium text-fg">
+                <td colSpan={4} className="px-4 py-3 text-sm font-medium text-fg">
                   Total
                 </td>
                 <TableCell className="text-right whitespace-nowrap font-medium">
+                  {saleTotal != null ? formatCurrency(saleTotal, payout.currency) : '—'}
+                </TableCell>
+                <TableCell className="text-right whitespace-nowrap font-medium">
                   {formatCurrency(grossTotal, payout.currency)}
                 </TableCell>
+                <td />
                 <TableCell className="text-right whitespace-nowrap font-medium">
                   {formatCurrency(withholdingTotal, payout.currency)}
                 </TableCell>

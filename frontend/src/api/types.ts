@@ -167,6 +167,9 @@ export interface PayoutCommissionDetail {
   occurred_at?: string | null;
   good_date?: string | null;
   payment_sequence?: number | null;
+  sale_amount?: number | null;
+  sale_payment_record_id?: string | null;
+  rate_percent?: number | null;
   gross_amount: number;
   withholding_amount: number;
   net_amount: number;
@@ -204,6 +207,7 @@ export interface Payout {
   commission_count?: number;
   earliest_sale_at?: string | null;
   latest_sale_at?: string | null;
+  total_sale_amount?: number | null;
   payout_payment?: PayoutPayment | null;
   payout_notification?: PayoutNotification | null;
   transitions?: PayoutTransition[];

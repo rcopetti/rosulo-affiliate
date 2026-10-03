@@ -1203,6 +1203,9 @@ async def test_payout_detail_returns_itemized_commissions_and_payee(
     assert datetime.fromisoformat(first_line["occurred_at"]) == DETAIL_SALE_FIRST
     assert first_line["good_date"] == str(PAST_DUE)
     assert first_line["payment_sequence"] == 1
+    assert first_line["sale_amount"] == 100.0
+    assert first_line["sale_payment_record_id"] == "detail-1"
+    assert first_line["rate_percent"] == 10.0
     assert first_line["gross_amount"] == 10.0
     assert first_line["withholding_amount"] == 0.0
     assert first_line["net_amount"] == 10.0
@@ -1221,6 +1224,7 @@ async def test_payout_detail_returns_itemized_commissions_and_payee(
     assert sum(line["net_amount"] for line in lines) == body["net_paid"]
     assert datetime.fromisoformat(body["earliest_sale_at"]) == DETAIL_SALE_FIRST
     assert datetime.fromisoformat(body["latest_sale_at"]) == DETAIL_SALE_SECOND
+    assert body["total_sale_amount"] == 200.0
 
 
 @pytest.mark.asyncio
