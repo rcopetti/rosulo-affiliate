@@ -114,9 +114,8 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
     assert sales_by_currency["USD"]["amount"] == 10.0
     assert sales_by_currency["EUR"]["amount"] == 10.0
 
-    sales_volume = a_dash.json()["sales_volume"]
-    assert len(sales_volume) == 1
-    assert sales_volume[0]["count"] == 2
+    sales_volume = {row["currency"]: row["amount"] for row in a_dash.json()["sales_volume"]}
+    assert sales_volume == {"USD": 10.0, "EUR": 10.0}
 
     t_dash = await client.get(
         "/api/v1/admin/dashboard",

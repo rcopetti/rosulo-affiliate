@@ -2,13 +2,15 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TrendingUp } from 'lucide-react';
 import { ChartFallbackTable } from './LeadVolumeChart';
+import { formatCurrency } from '@/lib/utils';
 
 interface DataPoint {
   bucket: string;
-  count: number;
+  amount: number;
+  currency: string;
 }
 
-export function SalesVolumeChart({ data }: { data: DataPoint[] }) {
+export function SalesVolumeChart({ data, currency = 'USD' }: { data: DataPoint[]; currency?: string }) {
   if (!data.length) {
     return (
       <EmptyState
@@ -27,9 +29,10 @@ export function SalesVolumeChart({ data }: { data: DataPoint[] }) {
           <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
             <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: 'rgb(var(--color-fg-muted))' }} stroke="var(--color-border)" />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'rgb(var(--color-fg-muted))' }} />
+            <YAxis tick={{ fontSize: 11, fill: 'rgb(var(--color-fg-muted))' }} />
             <Tooltip
               cursor={{ fill: 'rgb(var(--color-surface-muted) / 0.6)' }}
+              formatter={(value: number | string) => formatCurrency(Number(value), currency)}
               contentStyle={{
                 backgroundColor: 'rgb(var(--color-surface))',
                 border: '1px solid rgb(var(--color-border))',
@@ -38,13 +41,13 @@ export function SalesVolumeChart({ data }: { data: DataPoint[] }) {
                 fontSize: '0.75rem',
               }}
             />
-            <Bar dataKey="count" name="Sales" fill="var(--color-success)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+            <Bar dataKey="amount" name="Sales" fill="var(--color-success)" radius={[4, 4, 0, 0]} maxBarSize={48} />
           </BarChart>
         </ResponsiveContainer>
       </div>
       <ChartFallbackTable
         headers={['Period', 'Sales']}
-        rows={data.map((d) => [d.bucket, String(d.count)])}
+        rows={data.map((d) => [d.bucket, formatCurrency(d.amount, currency)])}
       />
     </div>
   );

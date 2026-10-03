@@ -34,6 +34,12 @@ class LeadVolumePoint(BaseModel):
     count: int
 
 
+class SalesVolumePoint(BaseModel):
+    bucket: str
+    amount: float
+    currency: str
+
+
 class SalesBySequencePoint(BaseModel):
     sequence: int
     count: int
@@ -44,7 +50,7 @@ class SalesBySequencePoint(BaseModel):
 class AffiliateDashboardOut(BaseModel):
     balance: BalanceOut
     lead_volume: list[LeadVolumePoint]
-    sales_volume: list[LeadVolumePoint]
+    sales_volume: list[SalesVolumePoint]
     sales_by_sequence: list[SalesBySequencePoint]
     payouts: list[dict[str, Any]]
 

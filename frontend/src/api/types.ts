@@ -313,7 +313,7 @@ export interface PaginatedEvents {
 
 export interface Dashboard {
   lead_volume: { bucket: string; count: number }[];
-  sales_volume: { bucket: string; count: number }[];
+  sales_volume: { bucket: string; amount: number; currency: string }[];
   sales_by_sequence: { sequence: number; count: number; amount: number; currency: string }[];
   balance: Balance;
 }

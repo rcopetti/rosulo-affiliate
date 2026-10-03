@@ -35,6 +35,9 @@ export function DashboardPage() {
     );
 
   const campaignOptions = [{ value: '', label: 'All campaigns' }, ...(campaigns || []).map((c) => ({ value: c.id, label: c.name }))];
+  const volumeCurrencies = dashboard.sales_volume.length
+    ? [...new Set(dashboard.sales_volume.map((row) => row.currency))]
+    : ['USD'];
   const salesCurrencies = dashboard.sales_by_sequence.length
     ? [...new Set(dashboard.sales_by_sequence.map((row) => row.currency))]
     : ['USD'];
@@ -55,12 +58,17 @@ export function DashboardPage() {
           </CardHeader>
           <LeadVolumeChart data={dashboard.lead_volume} />
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Sales Volume</CardTitle>
-          </CardHeader>
-          <SalesVolumeChart data={dashboard.sales_volume} />
-        </Card>
+        {volumeCurrencies.map((currency) => (
+          <Card key={currency}>
+            <CardHeader>
+              <CardTitle>Sales Volume — {currency}</CardTitle>
+            </CardHeader>
+            <SalesVolumeChart
+              data={dashboard.sales_volume.filter((row) => row.currency === currency)}
+              currency={currency}
+            />
+          </Card>
+        ))}
         {salesCurrencies.map((currency) => (
           <Card key={currency}>
             <CardHeader>

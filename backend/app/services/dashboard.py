@@ -28,21 +28,31 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
         {"bucket": str(day), "count": int(count)} for day, count in leads.all()
     ]
 
-    # Sales by day
+    # Sales net amount by day
     sale_query = (
-        select(func.date(Event.occurred_at), func.count())
+        select(
+            func.date(Event.occurred_at),
+            Commission.currency,
+            func.sum(Commission.net_amount),
+        )
+        .join(Commission, Commission.event_id == Event.id)
         .where(
             Event.affiliate_id == affiliate_id,
             Event.type == "sale",
             Event.occurred_at >= since,
         )
-        .group_by(func.date(Event.occurred_at))
+        .group_by(func.date(Event.occurred_at), Commission.currency)
     )
     if campaign_id:
         sale_query = sale_query.where(Event.campaign_id == campaign_id)
     sale_rows = await db.execute(sale_query)
     sales_volume = [
-        {"bucket": str(day), "count": int(count)} for day, count in sale_rows.all()
+        {
+            "bucket": str(day),
+            "amount": amount or Decimal("0.00"),
+            "currency": currency,
+        }
+        for day, currency, amount in sale_rows.all()
     ]
 
     # Sales by sequence
