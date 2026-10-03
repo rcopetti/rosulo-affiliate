@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Commission, Payout, PayoutCommission
+from app.db.models import Commission, Event, Payout, PayoutCommission
 
 ZERO = Decimal("0.00")
 
@@ -71,9 +71,11 @@ def build_balances(rows) -> list[dict]:
     ]
 
 
-async def get_balances(db: AsyncSession, affiliate_id: UUID) -> list[dict]:
+async def get_balances(
+    db: AsyncSession, affiliate_id: UUID, campaign_id: UUID | None = None
+) -> list[dict]:
     logical_status = _logical_status()
-    result = await db.execute(
+    query = (
         select(
             Commission.currency,
             logical_status,
@@ -83,6 +85,11 @@ async def get_balances(db: AsyncSession, affiliate_id: UUID) -> list[dict]:
         .where(Commission.affiliate_id == affiliate_id)
         .group_by(Commission.currency, logical_status)
     )
+    if campaign_id is not None:
+        query = query.join(Event, Event.id == Commission.event_id).where(
+            Event.campaign_id == campaign_id
+        )
+    result = await db.execute(query)
     return build_balances(result.all())
 
 

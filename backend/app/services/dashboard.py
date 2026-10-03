@@ -12,7 +12,7 @@ from app.services.balance import add_legacy_balance_fields, get_balances
 
 
 async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id: UUID | None = None):
-    balance = add_legacy_balance_fields(await get_balances(db, affiliate_id))
+    balance = add_legacy_balance_fields(await get_balances(db, affiliate_id, campaign_id))
 
     # Leads by day
     since = datetime.utcnow() - timedelta(days=30)

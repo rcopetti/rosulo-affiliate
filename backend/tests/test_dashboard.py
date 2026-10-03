@@ -156,6 +156,10 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
         for row in filtered.json()["sales_by_sequence"]
     }
     assert filtered_sequence == {"USD": 10.0, "EUR": 10.0}
+    filtered_balance = {
+        row["currency"]: row for row in filtered.json()["balance"]["balances_by_currency"]
+    }
+    assert filtered_balance["USD"]["earned"] == 10.0
 
     t_dash = await client.get(
         "/api/v1/admin/dashboard",
