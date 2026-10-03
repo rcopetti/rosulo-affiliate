@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { LeadVolumeChart } from '@/components/affiliate/LeadVolumeChart';
+import { SalesVolumeChart } from '@/components/affiliate/SalesVolumeChart';
 import { SalesBySequenceChart } from '@/components/affiliate/SalesBySequenceChart';
 import { CurrencyBalances } from '@/components/affiliate/CurrencyBalances';
 
@@ -53,6 +54,12 @@ export function DashboardPage() {
             <CardTitle>Lead Volume</CardTitle>
           </CardHeader>
           <LeadVolumeChart data={dashboard.lead_volume} />
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales Volume</CardTitle>
+          </CardHeader>
+          <SalesVolumeChart data={dashboard.sales_volume} />
         </Card>
         {salesCurrencies.map((currency) => (
           <Card key={currency}>

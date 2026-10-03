@@ -44,6 +44,7 @@ class SalesBySequencePoint(BaseModel):
 class AffiliateDashboardOut(BaseModel):
     balance: BalanceOut
     lead_volume: list[LeadVolumePoint]
+    sales_volume: list[LeadVolumePoint]
     sales_by_sequence: list[SalesBySequencePoint]
     payouts: list[dict[str, Any]]
 

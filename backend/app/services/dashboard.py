@@ -28,6 +28,23 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
         {"bucket": str(day), "count": int(count)} for day, count in leads.all()
     ]
 
+    # Sales by day
+    sale_query = (
+        select(func.date(Event.occurred_at), func.count())
+        .where(
+            Event.affiliate_id == affiliate_id,
+            Event.type == "sale",
+            Event.occurred_at >= since,
+        )
+        .group_by(func.date(Event.occurred_at))
+    )
+    if campaign_id:
+        sale_query = sale_query.where(Event.campaign_id == campaign_id)
+    sale_rows = await db.execute(sale_query)
+    sales_volume = [
+        {"bucket": str(day), "count": int(count)} for day, count in sale_rows.all()
+    ]
+
     # Sales by sequence
     sales = await db.execute(
         select(
@@ -66,6 +83,7 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
     return {
         "balance": balance,
         "lead_volume": lead_volume,
+        "sales_volume": sales_volume,
         "sales_by_sequence": sales_by_sequence,
         "payouts": payout_list,
     }
