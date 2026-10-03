@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ExternalLink } from 'lucide-react';
 import { getAdminPayout } from '@/api/admin/payouts';
 import { PayoutPaymentConfirmation, PayoutQueueItem } from '@/api/types';
 import { Button } from '@/components/ui/Button';
@@ -29,6 +30,15 @@ function usePayoutDetail(id: string | null) {
 
 function PayoutLoading() {
   return <p className="text-sm text-fg-muted">Loading…</p>;
+}
+
+function paypalSendUrl(recipient: string, amount: number, currency: string) {
+  const params = new URLSearchParams({
+    recipient,
+    amount: amount.toFixed(2),
+    currencyCode: currency,
+  });
+  return `https://www.paypal.com/myaccount/transfer/send/external?${params}`;
 }
 
 export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment, onRetryNotification, isRetryPending }: PayoutQueueProps) {
@@ -206,8 +216,23 @@ export function PayoutQueue({ payouts, onApprove, onReject, onConfirmPayment, on
                 <span className="font-medium">Net payout:</span>{' '}
                 {formatCurrency(paymentPayout.net_paid, paymentPayout.currency)}
               </p>
-              <p>
+              <p className="flex items-center gap-2">
                 <span className="font-medium">Payment method:</span> PayPal
+                {paymentPayout.affiliate?.paypal_email && (
+                  <a
+                    href={paypalSendUrl(
+                      paymentPayout.affiliate.paypal_email,
+                      paymentPayout.net_paid,
+                      paymentPayout.currency
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    Pay in PayPal
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </a>
+                )}
               </p>
               <p>
                 <span className="font-medium">Commissions:</span>{' '}

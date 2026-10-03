@@ -104,6 +104,23 @@ describe('PayoutQueue', () => {
     expect(screen.queryByLabelText(/^currency$/i)).not.toBeInTheDocument();
   });
 
+  it('links to a prefilled PayPal send-money flow for the payout', async () => {
+    renderQueue(approvedPayout, approvedPayout);
+
+    fireEvent.click(screen.getByRole('button', { name: /record payment/i }));
+
+    const link = await screen.findByRole('link', { name: /pay in paypal/i });
+    const href = link.getAttribute('href') ?? '';
+    expect(link).toHaveAttribute('target', '_blank');
+    const url = new URL(href);
+    expect(url.origin + url.pathname).toBe(
+      'https://www.paypal.com/myaccount/transfer/send/external'
+    );
+    expect(url.searchParams.get('recipient')).toBe('ada-paypal@example.com');
+    expect(url.searchParams.get('amount')).toBe('100.00');
+    expect(url.searchParams.get('currencyCode')).toBe('USD');
+  });
+
   it('confirms an approved payout with only a paid datetime and PayPal reference', async () => {
     const onConfirmPayment = vi.fn();
     renderQueue(approvedPayout, approvedPayout, { onConfirmPayment });
