@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_tenant
@@ -28,7 +28,5 @@ async def ingest_event(
         from app.db.models import Affiliate
 
         affiliate = await db.get(Affiliate, event.affiliate_id)
-        commission = await commission_service.calculate_from_sale_event(db, event, affiliate)
-        if commission:
-            await commission_service.mark_available_commissions(db)
+        await commission_service.calculate_from_sale_event(db, event, affiliate)
     return event

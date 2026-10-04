@@ -1,12 +1,12 @@
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import normalize_currency_code, normalize_provider_amount
-from app.db.models import Campaign, Event, PaymentRecord, Tenant
+from app.db.models import Campaign, Event, Tenant
 from app.schemas.event import EventCreate
 
 

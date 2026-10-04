@@ -1,5 +1,5 @@
 import { api } from './client';
-import { AffiliateAccount, PendingInvite, Tenant } from './types';
+import { AffiliateAccount, LinkedMerchant, PendingInvite, Tenant } from './types';
 
 export interface LoginRequest {
   email: string;
@@ -47,13 +47,40 @@ export async function acceptInvite(data: AcceptInviteRequest): Promise<AuthRespo
   return res.data;
 }
 
-export async function fetchMerchants(): Promise<Tenant[]> {
-  const res = await api.get<Tenant[]>('/affiliate/merchants');
+export async function fetchMerchants(): Promise<LinkedMerchant[]> {
+  const res = await api.get<LinkedMerchant[]>('/affiliate/merchants');
   return res.data;
 }
 
 export async function selectMerchant(tenantId: string): Promise<void> {
   await api.post(`/affiliate/merchants/${tenantId}/select`);
+}
+
+/**
+ * Validate an in-app deep link captured by the affiliate auth guard.
+ *
+ * Only affiliate payout detail links are honored, and only when the link's
+ * `tenant_id` query param matches one of the tenants the authenticated
+ * affiliate is linked to. External URLs, other paths, and foreign-tenant
+ * links all return null so callers fall back to the default landing page.
+ * The link never grants access on its own — the payout API still verifies
+ * ownership for the current session and tenant context.
+ */
+export function safeAffiliateReturnTo(
+  returnTo: string | null | undefined,
+  tenantIds: string[]
+): string | null {
+  if (!returnTo || !returnTo.startsWith('/affiliate/payouts/')) return null;
+  const tenantId = affiliateReturnTenantId(returnTo);
+  if (!tenantId || !tenantIds.includes(tenantId)) return null;
+  return returnTo;
+}
+
+/** Extract the `tenant_id` routing hint from a validated return path. */
+export function affiliateReturnTenantId(returnTo: string): string | null {
+  const queryStart = returnTo.indexOf('?');
+  if (queryStart === -1) return null;
+  return new URLSearchParams(returnTo.slice(queryStart + 1)).get('tenant_id');
 }
 
 export type ResetUserType = 'affiliate' | 'tenant';

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 import { getAdminEvents } from '@/api/admin/events';
+import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EventsTable } from '@/components/admin/EventsTable';
 import { Pagination } from '@/components/ui/Pagination';
@@ -18,7 +20,7 @@ export function EventsPage() {
   const [skip, setSkip] = useState(0);
   const [limit, setLimit] = useState(20);
   const [type, setType] = useState<string | undefined>(undefined);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['admin-events', skip, limit, type],
     queryFn: () => getAdminEvents(type ? { type: type as 'click' | 'lead' | 'sale' } : undefined, { skip, limit }),
   });
@@ -39,7 +41,18 @@ export function EventsPage() {
       <Card>
         <CardHeader
           action={
-            <div className="flex gap-1 rounded-lg bg-surface-muted p-1" role="group" aria-label="Filter by event type">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isFetching}
+                aria-label="Refresh event stream"
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} aria-hidden="true" />
+                Refresh
+              </Button>
+              <div className="flex gap-1 rounded-lg bg-surface-muted p-1" role="group" aria-label="Filter by event type">
               {typeFilters.map((f) => (
                 <button
                   key={f.label}
@@ -56,6 +69,7 @@ export function EventsPage() {
                   {f.label}
                 </button>
               ))}
+              </div>
             </div>
           }
         >

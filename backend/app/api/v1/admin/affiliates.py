@@ -2,7 +2,7 @@ import asyncio
 import mimetypes
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,11 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.dependencies import get_tenant, get_tenant_user
 from app.db.dependencies import get_db
 from app.db.models import AffiliateDocument, Tenant, TenantUser
-from app.schemas.affiliate import AffiliateOut
-from app.schemas.affiliate_invite import AffiliateInviteCreate, AffiliateInviteOut
+from app.schemas.affiliate import AffiliateOut, AffiliatePayoutHistory
+from app.schemas.affiliate_invite import (
+    AffiliateInviteCreate,
+    AffiliateInviteListOut,
+    AffiliateInviteOut,
+)
 from app.schemas.document_review import DocumentReviewCreate
 from app.services import affiliate as affiliate_service
 from app.services import affiliate_invite as invite_service
+from app.services import payout as payout_service
 from app.services.document_review import review_document
 from app.services.document_storage import get_document
 
@@ -31,9 +36,43 @@ async def admin_list_affiliates(tenant: Tenant = Depends(get_tenant), db: AsyncS
     return await affiliate_service.list_affiliates(db, tenant)
 
 
+# Declared before /{affiliate_id} so "invites" is not parsed as an affiliate UUID.
+@router.get("/invites", response_model=list[AffiliateInviteListOut])
+async def admin_list_pending_invites(tenant: Tenant = Depends(get_tenant), db: AsyncSession = Depends(get_db)):
+    return await invite_service.list_pending_invites(db, tenant)
+
+
 @router.get("/{affiliate_id}", response_model=AffiliateOut)
 async def admin_get_affiliate(affiliate_id: str, tenant: Tenant = Depends(get_tenant), db: AsyncSession = Depends(get_db)):
     return await affiliate_service.get_affiliate(db, uuid.UUID(affiliate_id), tenant)
+
+
+@router.get("/{affiliate_id}/payouts", response_model=AffiliatePayoutHistory)
+async def admin_list_affiliate_payouts(
+    affiliate_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    try:
+        parsed_id = uuid.UUID(affiliate_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Affiliate not found") from exc
+    affiliate = await affiliate_service.get_affiliate(db, parsed_id, tenant)
+    if not affiliate:
+        # Same 404 for unknown and cross-tenant IDs: never reveal existence.
+        raise HTTPException(status_code=404, detail="Affiliate not found")
+    items, total, paid_totals = await payout_service.list_affiliate_payout_history(
+        db, parsed_id, tenant, limit, offset
+    )
+    return AffiliatePayoutHistory(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        paid_totals_by_currency=paid_totals,
+    )
 
 
 @router.get("/{affiliate_id}/documents/{document_id}/view")

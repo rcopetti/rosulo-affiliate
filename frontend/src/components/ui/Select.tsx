@@ -14,12 +14,22 @@ interface SelectProps {
   placeholder?: string;
   label?: string;
   className?: string;
+  inline?: boolean;
 }
 
-export function Select({ value, onChange, options, placeholder, label, className }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, label, className, inline }: SelectProps) {
   return (
-    <div className={cn('w-full', className)}>
-      {label && <label className="mb-1 block text-sm font-medium text-fg">{label}</label>}
+    <div className={cn(inline ? 'flex items-center gap-2' : 'w-full', className)}>
+      {label && (
+        <label
+          className={cn(
+            'text-sm font-medium text-fg',
+            inline ? 'whitespace-nowrap' : 'mb-1 block'
+          )}
+        >
+          {label}
+        </label>
+      )}
       <SelectPrimitive.Root value={value} onValueChange={onChange}>
         <SelectPrimitive.Trigger
           className="inline-flex w-full cursor-pointer items-center justify-between rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"

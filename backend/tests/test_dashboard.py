@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -76,6 +76,7 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
                 "currency": currency,
                 "payment_sequence": 1,
                 "good_date": str(date.today()),
+                "payment_record_id": f"pay-{event_id}",
             },
         )
         assert response.status_code == 200
@@ -113,6 +114,53 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
     assert sales_by_currency["USD"]["amount"] == 10.0
     assert sales_by_currency["EUR"]["amount"] == 10.0
 
+    sales_volume = {row["currency"]: row["amount"] for row in a_dash.json()["sales_volume"]}
+    assert sales_volume == {"USD": 10.0, "EUR": 10.0}
+
+    # A sale on a second campaign must be excluded when filtering by campaign
+    camp_b = await client.post(
+        "/api/v1/affiliate/campaigns",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+        json={"name": "Dash Camp B", "landing_url": "https://allbum.me/db"},
+    )
+    campaign_b_id = camp_b.json()["id"]
+    response = await client.post(
+        "/api/v1/events",
+        headers={"X-API-Key": "test-api-key"},
+        json={
+            "event_id": "dash-sale-usd-b",
+            "type": "sale",
+            "campaign_id": campaign_b_id,
+            "customer_id": "customer-usd-b",
+            "amount": 200.0,
+            "currency": "USD",
+            "payment_sequence": 1,
+            "good_date": str(date.today()),
+            "payment_record_id": "pay-dash-sale-usd-b",
+        },
+    )
+    assert response.status_code == 200
+
+    filtered = await client.get(
+        "/api/v1/affiliate/dashboard",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": str(tenant.id)},
+        params={"campaign_id": campaign_id},
+    )
+    assert filtered.status_code == 200
+    filtered_volume = {
+        row["currency"]: row["amount"] for row in filtered.json()["sales_volume"]
+    }
+    assert filtered_volume == {"USD": 10.0, "EUR": 10.0}
+    filtered_sequence = {
+        row["currency"]: row["amount"]
+        for row in filtered.json()["sales_by_sequence"]
+    }
+    assert filtered_sequence == {"USD": 10.0, "EUR": 10.0}
+    filtered_balance = {
+        row["currency"]: row for row in filtered.json()["balance"]["balances_by_currency"]
+    }
+    assert filtered_balance["USD"]["earned"] == 10.0
+
     t_dash = await client.get(
         "/api/v1/admin/dashboard",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -123,5 +171,42 @@ async def test_dashboards(client: AsyncClient, tenant: Tenant, tenant_user):
         row["currency"]: row for row in t_dash.json()["commission_liability"]
     }
     assert set(liability_by_currency) == {"USD", "EUR"}
-    assert liability_by_currency["USD"]["gross"] == 10.0
+    assert liability_by_currency["USD"]["gross"] == 30.0
     assert liability_by_currency["EUR"]["gross"] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_reserved_commissions_remain_in_tenant_liability(
+    client: AsyncClient, payout_scenario
+):
+    due = date.today() - timedelta(days=1)
+    selected = await payout_scenario.create_commission(
+        due, "liab-selected-1", status="available"
+    )
+    await payout_scenario.create_commission(
+        due, "liab-available-1", status="available"
+    )
+    await payout_scenario.create_commission(
+        due, "liab-pending-1", status="pending"
+    )
+
+    reserve = await client.post(
+        "/api/v1/affiliate/payout-requests",
+        headers=payout_scenario.affiliate_headers,
+        json={"currency": "USD", "commission_ids": [str(selected)]},
+    )
+    assert reserve.status_code == 200
+    assert await payout_scenario.commission_status(selected) == "reserved"
+
+    response = await client.get(
+        "/api/v1/admin/dashboard",
+        headers={"Authorization": f"Bearer {payout_scenario.admin_token}"},
+    )
+    assert response.status_code == 200
+    usd = next(
+        row
+        for row in response.json()["commission_liability"]
+        if row["currency"] == "USD"
+    )
+    # available + pending + reserved commissions all remain merchant liability
+    assert usd["gross"] == 30.0

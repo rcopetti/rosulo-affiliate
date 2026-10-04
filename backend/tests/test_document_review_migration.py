@@ -9,9 +9,42 @@ def test_document_review_migration_follows_current_head():
     config = Config(str(backend_dir / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "a9b0c1d2e3f4"
     revision = script.get_revision("a9b0c1d2e3f4")
     assert revision.down_revision == "d4e5f6a7b8c9"
+
+
+def test_manual_payout_migration_follows_document_review_head():
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+
+    revision = script.get_revision("b1c2d3e4f5a6")
+    assert revision.down_revision == "a9b0c1d2e3f4"
+
+
+def test_commission_availability_migration_follows_manual_payout_head():
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+
+    assert script.get_revision("e8f9a0b1c2d3").down_revision == "b1c2d3e4f5a6"
+
+
+def test_payout_payment_migration_follows_commission_availability_head():
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+
+    assert script.get_revision("f9a0b1c2d3e4").down_revision == "e8f9a0b1c2d3"
+
+
+def test_payment_record_retirement_migration_is_current_head():
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+
+    assert script.get_current_head() == "a1b2c3d4e5f6"
+    assert script.get_revision("a1b2c3d4e5f6").down_revision == "f9a0b1c2d3e4"
 
 
 def test_document_review_models_include_merchant_scope_and_decisions():

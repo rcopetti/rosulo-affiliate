@@ -12,6 +12,7 @@ export function CurrencyBalances({ balance }: { balance: Balance }) {
           pending: balance.pending ?? 0,
           available: balance.available ?? 0,
           paid: balance.paid ?? 0,
+          reserved: balance.reserved ?? 0,
           tax_retained: balance.tax_retained ?? 0,
           reversal_total: balance.reversal_total ?? 0,
         },
@@ -32,6 +33,7 @@ export function CurrencyBalances({ balance }: { balance: Balance }) {
             earned={currencyBalance.earned}
             pending={currencyBalance.pending}
             available={currencyBalance.available}
+            reserved={currencyBalance.reserved}
             paid={currencyBalance.paid}
             currency={currencyBalance.currency}
           />

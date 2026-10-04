@@ -1,0 +1,268 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Daily EventBridge Scheduler -> ECS RunTask target that runs the
+  rosulo-affiliate payout maintenance job
+  (`python -m app.jobs.payout_maintenance`) on Fargate.
+  The job promotes pending commissions whose merchant due date has arrived
+  and delivers queued/expired-lease payout notification emails via SES.
+  DATABASE_URL is injected from SSM Parameter Store via the ECS Secrets
+  field; no credentials appear in the template, schedule payload, or the
+  container command line.
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: >-
+      Full image URI for the backend image, e.g.
+      239714841352.dkr.ecr.us-west-2.amazonaws.com/rosulo/rosulo-affiliate-backend:<tag>
+    AllowedPattern: "^\\S+$"
+  ClusterArn:
+    Type: String
+    Description: ARN of the ECS cluster that hosts the maintenance task.
+    Default: arn:aws:ecs:us-west-2:239714841352:cluster/allbum-cluster-serverless
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets for the task's awsvpc network interface.
+    Default: subnet-091d7350c16609a01
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group attached to the task network interface.
+    Default: sg-034e1f956f9b3a4b9
+  TaskRoleArn:
+    Type: String
+    Description: >-
+      ARN of the IAM role the task's containers run as (application
+      permissions). PassRole is scoped to this ARN. The role name is
+      extracted from the ARN for policy attachment, so the ARN must use an
+      unpathed role name (arn:aws:iam::<account>:role/<name>).
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:iam::\\d{12}:role/[^/]+$"
+  ExecutionRoleArn:
+    Type: String
+    Description: >-
+      ARN of the ECS execution role (image pull, awslogs, SSM secret
+      retrieval). PassRole is scoped to this ARN.
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:iam::\\d{12}:role/.+$"
+  DatabaseUrlSsmParameterArn:
+    Type: String
+    Description: >-
+      ARN of the SSM Parameter Store parameter holding DATABASE_URL
+      (SecureString). Only the ARN is referenced; the value never enters
+      the template or task logs.
+    Default: arn:aws:ssm:us-west-2:239714841352:parameter/rosulo/affiliate-backend/DATABASE_URL
+  EmailFrom:
+    Type: String
+    Description: >-
+      Verified SES sender address for payout notification emails
+      (EMAIL_FROM), e.g. payouts@example.com.
+    AllowedPattern: "^\\S+@\\S+$"
+  SesIdentityArn:
+    Type: String
+    Description: >-
+      ARN of the verified SES identity (domain or email address) that owns
+      EmailFrom, e.g.
+      arn:aws:ses:us-west-2:123456789012:identity/example.com. The task role
+      is granted ses:SendEmail scoped to this identity only.
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:ses:[a-z0-9-]+:\\d{12}:identity/.+$"
+  FrontendUrl:
+    Type: String
+    Description: >-
+      Base URL of the affiliate frontend (FRONTEND_URL); payout emails link
+      to /affiliate/payouts/{id}?tenant_id=... under this origin.
+    AllowedPattern: "^https?://\\S+$"
+  LogRetentionInDays:
+    Type: Number
+    Description: CloudWatch retention for the task log group.
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+  ScheduleState:
+    Type: String
+    Description: >-
+      ENABLED runs the job daily at 00:15 UTC. Deploy DISABLED while the
+      task role, SSM parameter, and networking are reviewed, then flip on.
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+
+Resources:
+  # ------------------------------------------------------------------
+  # CloudWatch log group for the one-shot task containers.
+  # ------------------------------------------------------------------
+  PayoutMaintenanceLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    Properties:
+      LogGroupName: /ecs/affiliates-payout-maintenance
+      RetentionInDays: !Ref LogRetentionInDays
+
+  # ------------------------------------------------------------------
+  # Fargate task definition: smallest supported size, one-shot command.
+  # ------------------------------------------------------------------
+  PayoutMaintenanceTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: affiliates-payout-maintenance
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "256"
+      Memory: "512"
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      TaskRoleArn: !Ref TaskRoleArn
+      ExecutionRoleArn: !Ref ExecutionRoleArn
+      ContainerDefinitions:
+        - Name: payout-maintenance
+          Image: !Ref ImageUri
+          Essential: true
+          # The entrypoint dispatcher execs this verbatim; no secrets on
+          # the command line.
+          Command: ["python", "-m", "app.jobs.payout_maintenance"]
+          Environment:
+            - Name: EMAIL_BACKEND
+              Value: ses
+            - Name: EMAIL_FROM
+              Value: !Ref EmailFrom
+            - Name: SES_REGION
+              Value: !Ref AWS::Region
+            - Name: FRONTEND_URL
+              Value: !Ref FrontendUrl
+          Secrets:
+            - Name: DATABASE_URL
+              ValueFrom: !Ref DatabaseUrlSsmParameterArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref PayoutMaintenanceLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # ------------------------------------------------------------------
+  # Task-role grant: the maintenance task sends payout notification emails
+  # via SES. Scoped to ses:SendEmail on the verified sender identity only —
+  # no SendRawEmail, no other identities. Roles takes the role NAME, which
+  # is extracted from the passed TaskRoleArn (expects an unpathed role ARN
+  # of the form arn:aws:iam::<account>:role/<name>).
+  # ------------------------------------------------------------------
+  PayoutMaintenanceSesPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: affiliates-payout-maintenance-ses-send
+      Roles:
+        - !Select [1, !Split ["role/", !Ref TaskRoleArn]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SendPayoutNotificationEmail
+            Effect: Allow
+            Action: ses:SendEmail
+            Resource: !Ref SesIdentityArn
+            Condition:
+              StringEquals:
+                ses:FromAddress: !Ref EmailFrom
+
+  # ------------------------------------------------------------------
+  # SQS dead-letter queue for failed schedule deliveries.
+  # ------------------------------------------------------------------
+  PayoutMaintenanceDLQ:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    Properties:
+      QueueName: affiliates-payout-maintenance-dlq
+      MessageRetentionPeriod: 1209600 # 14 days
+      SqsManagedSseEnabled: true
+
+  # ------------------------------------------------------------------
+  # Execution role assumed by EventBridge Scheduler. Scoped to:
+  #   - ecs:RunTask on the maintenance task definition and its cluster
+  #   - iam:PassRole for the task/execution roles, ECS tasks service only
+  #   - sqs:SendMessage so Scheduler can write failed invocations to the
+  #     dead-letter queue
+  # ------------------------------------------------------------------
+  SchedulerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ecs-run-payout-maintenance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: RunMaintenanceTask
+                Effect: Allow
+                Action: ecs:RunTask
+                Resource:
+                  - !GetAtt PayoutMaintenanceTaskDefinition.TaskDefinitionArn
+                  - !Ref ClusterArn
+              - Sid: PassTaskRoles
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Ref TaskRoleArn
+                  - !Ref ExecutionRoleArn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+              - Sid: SendToDeadLetterQueue
+                Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt PayoutMaintenanceDLQ.Arn
+
+  # ------------------------------------------------------------------
+  # Daily schedule: 00:15 UTC. Flexible window off (fixed cadence).
+  # Retry policy: 2 delivery retries within a one-hour event age. A task
+  # that starts but exits non-zero is NOT retried by Scheduler — it is
+  # visible in ECS stopped-task/CloudWatch logs and the next daily run
+  # catches up.
+  # ------------------------------------------------------------------
+  PayoutMaintenanceSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${AWS::StackName}-daily"
+      GroupName: default
+      Description: Daily commission maturity job for rosulo-affiliate.
+      ScheduleExpression: cron(15 0 * * ? *)
+      ScheduleExpressionTimezone: UTC
+      State: !Ref ScheduleState
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !Ref ClusterArn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        RetryPolicy:
+          MaximumRetryAttempts: 2
+          MaximumEventAgeInSeconds: 3600
+        DeadLetterConfig:
+          Arn: !GetAtt PayoutMaintenanceDLQ.Arn
+        EcsParameters:
+          TaskDefinitionArn: !GetAtt PayoutMaintenanceTaskDefinition.TaskDefinitionArn
+          TaskCount: 1
+          LaunchType: FARGATE
+          PlatformVersion: LATEST
+          NetworkConfiguration:
+            AwsVpcConfiguration:
+              AssignPublicIp: ENABLED
+              Subnets: !Ref SubnetIds
+              SecurityGroups:
+                - !Ref SecurityGroupId
+
+Outputs:
+  ScheduleArn:
+    Description: ARN of the EventBridge Scheduler schedule.
+    Value: !GetAtt PayoutMaintenanceSchedule.Arn
+  TaskDefinitionArn:
+    Description: ARN of the maintenance ECS task definition.
+    Value: !GetAtt PayoutMaintenanceTaskDefinition.TaskDefinitionArn
+  DeadLetterQueueArn:
+    Description: ARN of the schedule dead-letter queue.
+    Value: !GetAtt PayoutMaintenanceDLQ.Arn
+  DeadLetterQueueUrl:
+    Description: URL of the schedule dead-letter queue.
+    Value: !Ref PayoutMaintenanceDLQ
+  LogGroupName:
+    Description: CloudWatch log group holding task container logs.
+    Value: !Ref PayoutMaintenanceLogGroup

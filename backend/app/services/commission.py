@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import and_, or_, select
@@ -10,16 +10,30 @@ from app.db.models import (
     AffiliateAccount,
     Commission,
     Event,
-    PaymentRecord,
+    Payout,
+    PayoutCommission,
     Term,
 )
 from app.services.contract import get_contract_for_affiliate
 from app.services.tax import apply_tax
 
 
+def utc_midnight(d: date) -> datetime:
+    """Return the UTC-midnight instant a merchant due date becomes available."""
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
+
 async def calculate_from_sale_event(
     db: AsyncSession, event: Event, affiliate: Affiliate
 ) -> Commission | None:
+    if event.good_date is None:
+        # Sale events ingested by older app versions may lack the merchant
+        # due date; there is no date to derive availability from, so record
+        # why no commission was created instead of inventing one.
+        event.commission_status = "missing_good_date"
+        await db.commit()
+        return None
+
     if not is_supported_currency(event.currency):
         event.commission_status = "currency_unsupported"
         await db.commit()
@@ -89,7 +103,7 @@ async def calculate_from_sale_event(
         net_amount=net,
         currency=event.currency,
         status="pending",
-        available_on=event.good_date,
+        available_at=utc_midnight(event.good_date),
     )
     db.add(commission)
     await db.commit()
@@ -97,25 +111,62 @@ async def calculate_from_sale_event(
     return commission
 
 
-async def mark_available_commissions(db: AsyncSession):
-    result = await db.execute(
-        select(Commission).where(
-            Commission.status == "pending",
-            Commission.available_on <= date.today(),
+async def mature_due_commissions(db: AsyncSession, now_utc: datetime | None = None) -> int:
+    """Promote pending commissions whose merchant due date has arrived.
+
+    Rows are selected in deterministic order and locked with
+    ``FOR UPDATE ... SKIP LOCKED`` so overlapping scheduled runs never
+    promote the same row twice; promotion is conditional on the row still
+    being ``pending``. Commissions holding a reservation — an active
+    ``PayoutCommission`` link or a legacy link whose parent payout is still
+    ``pending_approval``/``approved`` — are skipped.
+
+    Rows written by an older app version after the expand migration may have
+    a null ``available_at``; the due instant is then derived as UTC midnight
+    of ``Event.good_date`` and ``available_at`` is backfilled from it.
+    """
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+
+    active_reservation = (
+        select(PayoutCommission.id)
+        .join(Payout, Payout.id == PayoutCommission.payout_id)
+        .where(
+            PayoutCommission.commission_id == Commission.id,
+            or_(
+                PayoutCommission.is_active.is_(True),
+                Payout.status.in_(("pending_approval", "approved")),
+            ),
         )
+        .exists()
     )
-    for commission in result.scalars().all():
-        event = await db.get(Event, commission.event_id)
-        if event and event.payment_record_id:
-            pr = await db.execute(
-                select(PaymentRecord).where(
-                    PaymentRecord.tenant_payment_id == event.payment_record_id,
-                    PaymentRecord.status == "paid",
-                )
-            )
-            if pr.scalar_one_or_none():
-                commission.status = "available"
+    result = await db.execute(
+        select(Commission, Event)
+        .join(Event, Event.id == Commission.event_id)
+        .where(
+            Commission.status == "pending",
+            or_(
+                Commission.available_at <= now_utc,
+                Commission.available_at.is_(None),
+            ),
+            ~active_reservation,
+        )
+        .order_by(Commission.id)
+        .with_for_update(of=Commission, skip_locked=True)
+    )
+    promoted = 0
+    for commission, event in result.all():
+        due_at = commission.available_at
+        if due_at is None:
+            if event.good_date is None:
+                continue
+            due_at = utc_midnight(event.good_date)
+            commission.available_at = due_at
+        if due_at <= now_utc:
+            commission.status = "available"
+            promoted += 1
     await db.commit()
+    return promoted
 
 
 async def create_reversal(db: AsyncSession, event: Event, affiliate: Affiliate) -> Commission:
@@ -133,11 +184,3 @@ async def create_reversal(db: AsyncSession, event: Event, affiliate: Affiliate) 
     await db.commit()
     await db.refresh(commission)
     return commission
-
-
-async def list_commissions(db: AsyncSession, affiliate: Affiliate, status: str | None = None):
-    query = select(Commission).where(Commission.affiliate_id == affiliate.id)
-    if status:
-        query = query.where(Commission.status == status)
-    result = await db.execute(query)
-    return result.scalars().all()

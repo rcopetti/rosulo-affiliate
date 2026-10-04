@@ -7,6 +7,12 @@ import { PdfViewer } from '@/components/ui/PdfViewer';
 import { useToast } from '@/components/ui/Toast';
 import { formatDateTime } from '@/lib/utils';
 
+const IRS_FORM_URLS: Record<string, string> = {
+  'W-8BEN': 'https://www.irs.gov/pub/irs-pdf/fw8ben.pdf',
+  'W-8BEN-E': 'https://www.irs.gov/pub/irs-pdf/fw8bene.pdf',
+  'W-9': 'https://www.irs.gov/pub/irs-pdf/fw9.pdf',
+};
+
 interface KycUploaderProps {
   requiredDocumentType?: string;
   documents?: AffiliateDocument[];
@@ -29,6 +35,7 @@ export function KycUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const requiredType = requiredDocumentType || 'W-9';
+  const hasSubmittedRequired = documents.some((d) => d.document_type === requiredType);
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -65,6 +72,16 @@ export function KycUploader({
     <div className="space-y-3">
       <div className="rounded-lg border border-line bg-surface-muted p-3 text-sm text-fg-muted">
         Required document: <strong className="text-fg">{requiredType}</strong>
+        {IRS_FORM_URLS[requiredType] && (
+          <a
+            href={IRS_FORM_URLS[requiredType]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 text-primary hover:underline"
+          >
+            Download blank {requiredType} (irs.gov)
+          </a>
+        )}
         <span className="mt-1 block text-xs">Documents are encrypted on the server and can only be viewed through this authenticated session. Download is not provided.</span>
       </div>
       {payoutEligibility && (
@@ -104,7 +121,7 @@ export function KycUploader({
       )}
       <input ref={inputRef} type="file" className="hidden" accept=".pdf,image/jpeg,image/png,image/webp" aria-label={`Upload ${requiredType}`} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       <Button onClick={() => inputRef.current?.click()} isLoading={loading} disabled={isLoading || !requiredDocumentType}>
-        Replace {requiredType}
+        {hasSubmittedRequired ? `Replace ${requiredType}` : `Submit ${requiredType}`}
       </Button>
       {previewUrl && (
         <div className="overflow-hidden rounded-lg border border-line bg-surface">

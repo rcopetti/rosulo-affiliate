@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { AffiliateLayout } from '@/components/layout/AffiliateLayout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -7,8 +7,14 @@ import { useAuthStore } from '@/store/auth';
 function AffiliateAuthGuard() {
   const token = useAuthStore((s) => s.token);
   const tenantId = useAuthStore((s) => s.currentTenantId);
-  if (!token) return <Navigate to="/login" replace />;
-  if (!tenantId) return <Navigate to="/merchants" replace />;
+  const location = useLocation();
+  // Preserve the internal path+query (e.g. a payout email deep link) so the
+  // login/merchant-selection flow can return the user to it. The value is
+  // only ever a location inside this app — the login side re-validates it
+  // before navigating.
+  const returnTo = encodeURIComponent(location.pathname + location.search);
+  if (!token) return <Navigate to={`/login?returnTo=${returnTo}`} replace />;
+  if (!tenantId) return <Navigate to={`/merchants?returnTo=${returnTo}`} replace />;
   return <Outlet />;
 }
 
@@ -82,6 +88,10 @@ export const router = createBrowserRouter([
               {
                 path: 'payouts/request',
                 lazy: async () => ({ Component: (await import('@/pages/affiliate/RequestPayoutPage')).RequestPayoutPage }),
+              },
+              {
+                path: 'payouts/:id',
+                lazy: async () => ({ Component: (await import('@/pages/affiliate/PayoutDetailPage')).PayoutDetailPage }),
               },
               {
                 path: 'profile',

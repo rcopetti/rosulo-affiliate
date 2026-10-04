@@ -4,14 +4,15 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.db.models import Campaign, Commission, Event, Payout
+from app.db.models import Affiliate, Campaign, Commission, Event, Payout
 from app.services import affiliate as affiliate_service
 from app.services.balance import add_legacy_balance_fields, get_balances
 
 
 async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id: UUID | None = None):
-    balance = add_legacy_balance_fields(await get_balances(db, affiliate_id))
+    balance = add_legacy_balance_fields(await get_balances(db, affiliate_id, campaign_id))
 
     # Leads by day
     since = datetime.utcnow() - timedelta(days=30)
@@ -27,8 +28,35 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
         {"bucket": str(day), "count": int(count)} for day, count in leads.all()
     ]
 
+    # Sales net amount by day
+    sale_query = (
+        select(
+            func.date(Event.occurred_at),
+            Commission.currency,
+            func.sum(Commission.net_amount),
+        )
+        .join(Commission, Commission.event_id == Event.id)
+        .where(
+            Event.affiliate_id == affiliate_id,
+            Event.type == "sale",
+            Event.occurred_at >= since,
+        )
+        .group_by(func.date(Event.occurred_at), Commission.currency)
+    )
+    if campaign_id:
+        sale_query = sale_query.where(Event.campaign_id == campaign_id)
+    sale_rows = await db.execute(sale_query)
+    sales_volume = [
+        {
+            "bucket": str(day),
+            "amount": amount or Decimal("0.00"),
+            "currency": currency,
+        }
+        for day, currency, amount in sale_rows.all()
+    ]
+
     # Sales by sequence
-    sales = await db.execute(
+    sequence_query = (
         select(
             Event.payment_sequence,
             Commission.currency,
@@ -39,6 +67,9 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
         .where(Event.affiliate_id == affiliate_id)
         .group_by(Event.payment_sequence, Commission.currency)
     )
+    if campaign_id:
+        sequence_query = sequence_query.where(Event.campaign_id == campaign_id)
+    sales = await db.execute(sequence_query)
     sales_by_sequence = [
         {
             "sequence": int(seq or 1),
@@ -65,6 +96,7 @@ async def affiliate_dashboard(db: AsyncSession, affiliate_id: UUID, campaign_id:
     return {
         "balance": balance,
         "lead_volume": lead_volume,
+        "sales_volume": sales_volume,
         "sales_by_sequence": sales_by_sequence,
         "payouts": payout_list,
     }
@@ -111,7 +143,7 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
         .join(Event, Commission.event_id == Event.id)
         .where(
             Event.tenant_id == tenant_id,
-            Commission.status.in_(["available", "pending"]),
+            Commission.status.in_(["available", "pending", "reserved"]),
         )
         .group_by(period_expr, Commission.currency)
     )
@@ -127,7 +159,9 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
 
     # Pending payouts
     payouts_result = await db.execute(
-        select(Payout).where(
+        select(Payout)
+        .options(selectinload(Payout.affiliate).selectinload(Affiliate.account))
+        .where(
             Payout.tenant_id == tenant_id,
             Payout.status == "pending_approval",
         )
@@ -140,6 +174,7 @@ async def tenant_dashboard(db: AsyncSession, tenant_id: UUID):
             "status": p.status,
             "requested_at": p.requested_at.isoformat() if p.requested_at else None,
             "affiliate_id": str(p.affiliate_id),
+            "affiliate": {"name": p.affiliate.account.name} if p.affiliate else None,
         }
         for p in payouts_result.scalars().all()
     ]

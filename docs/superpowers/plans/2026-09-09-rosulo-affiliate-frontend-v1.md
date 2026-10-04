@@ -1,5 +1,7 @@
 # Rosulo Affiliate v1 Frontend Implementation Plan
 
+> **Historical note (2026-10-01):** The original payout-request and merchant payout UI tasks are superseded by `docs/superpowers/specs/2026-10-01-commission-backed-manual-payouts-design.md` and the active next-phase plan. Build the commission-selection, itemized review, manual PayPal confirmation, payout history, and payment-notice flows from those current documents instead of this historical scope.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan package-by-package. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a responsive, accessible web frontend for the Rosulo Affiliate Service. The frontend serves two primary audiences: affiliates (self-service dashboard, campaigns, payouts) and tenant admins (affiliate/contract/payout management). It authenticates against the FastAPI backend and uses `X-Tenant-Id` for affiliate merchant selection.

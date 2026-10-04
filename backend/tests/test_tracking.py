@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from httpx import AsyncClient
 
@@ -81,6 +83,8 @@ async def test_click_tracking_flow(client: AsyncClient, tenant: Tenant, tenant_u
             "amount": 100.0,
             "currency": "USD",
             "payment_sequence": 1,
+            "good_date": str(date.today()),
+            "payment_record_id": "track-pay-1",
         },
     )
     assert sale.status_code == 200

@@ -3,7 +3,8 @@ import { getAdminPayouts } from '@/api/admin/payouts';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { PayoutQueue } from '@/components/admin/PayoutQueue';
 import { useToast } from '@/components/ui/Toast';
-import { approvePayout, rejectPayout } from '@/api/admin/payouts';
+import { approvePayout, confirmPayoutPayment, rejectPayout, retryPayoutNotification } from '@/api/admin/payouts';
+import { PayoutPaymentConfirmation } from '@/api/types';
 
 export function AdminPayoutsPage() {
   const toast = useToast();
@@ -14,6 +15,8 @@ export function AdminPayoutsPage() {
     mutationFn: approvePayout,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
       toast.add({ title: 'Payout approved', variant: 'success' });
     },
     onError: () => toast.add({ title: 'Error', description: 'Could not approve', variant: 'error' }),
@@ -23,9 +26,35 @@ export function AdminPayoutsPage() {
     mutationFn: rejectPayout,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
       toast.add({ title: 'Payout rejected', variant: 'success' });
     },
     onError: () => toast.add({ title: 'Error', description: 'Could not reject', variant: 'error' }),
+  });
+
+  const confirm = useMutation({
+    mutationFn: ({ id, details }: { id: string; details: PayoutPaymentConfirmation }) =>
+      confirmPayoutPayment(id, details),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
+      toast.add({ title: 'Payment recorded', variant: 'success' });
+    },
+    onError: () => toast.add({ title: 'Error', description: 'Could not record payment', variant: 'error' }),
+  });
+
+  const retryNotification = useMutation({
+    mutationFn: retryPayoutNotification,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-payout'] });
+      toast.add({ title: 'Notification email requeued', variant: 'success' });
+    },
+    onError: () =>
+      toast.add({ title: 'Error', description: 'Could not retry notification', variant: 'error' }),
   });
 
   return (
@@ -42,6 +71,9 @@ export function AdminPayoutsPage() {
             payouts={data || []}
             onApprove={(id) => approve.mutate(id)}
             onReject={(id) => reject.mutate(id)}
+            onConfirmPayment={(id, details) => confirm.mutate({ id, details })}
+            onRetryNotification={(id) => retryNotification.mutate(id)}
+            isRetryPending={retryNotification.isPending}
           />
         )}
       </Card>

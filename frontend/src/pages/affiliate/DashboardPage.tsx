@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { LeadVolumeChart } from '@/components/affiliate/LeadVolumeChart';
+import { SalesVolumeChart } from '@/components/affiliate/SalesVolumeChart';
 import { SalesBySequenceChart } from '@/components/affiliate/SalesBySequenceChart';
 import { CurrencyBalances } from '@/components/affiliate/CurrencyBalances';
 
@@ -34,6 +35,9 @@ export function DashboardPage() {
     );
 
   const campaignOptions = [{ value: '', label: 'All campaigns' }, ...(campaigns || []).map((c) => ({ value: c.id, label: c.name }))];
+  const volumeCurrencies = dashboard.sales_volume.length
+    ? [...new Set(dashboard.sales_volume.map((row) => row.currency))]
+    : ['USD'];
   const salesCurrencies = dashboard.sales_by_sequence.length
     ? [...new Set(dashboard.sales_by_sequence.map((row) => row.currency))]
     : ['USD'];
@@ -54,6 +58,17 @@ export function DashboardPage() {
           </CardHeader>
           <LeadVolumeChart data={dashboard.lead_volume} />
         </Card>
+        {volumeCurrencies.map((currency) => (
+          <Card key={currency}>
+            <CardHeader>
+              <CardTitle>Sales Volume — {currency}</CardTitle>
+            </CardHeader>
+            <SalesVolumeChart
+              data={dashboard.sales_volume.filter((row) => row.currency === currency)}
+              currency={currency}
+            />
+          </Card>
+        ))}
         {salesCurrencies.map((currency) => (
           <Card key={currency}>
             <CardHeader>

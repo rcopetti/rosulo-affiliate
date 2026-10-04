@@ -10,14 +10,16 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 
 from app.db.base import Base
 
@@ -214,6 +216,10 @@ class Event(Base):
             "event_id",
             name="uq_events_tenant_id_event_id",
         ),
+        CheckConstraint(
+            "type <> 'sale' OR (good_date IS NOT NULL AND payment_record_id IS NOT NULL AND length(btrim(payment_record_id)) > 0)",
+            name="ck_events_sale_payment_context",
+        ),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(String, nullable=False)
@@ -240,22 +246,14 @@ class Event(Base):
     commissions = relationship("Commission", back_populates="event")
 
 
-class PaymentRecord(Base):
-    __tablename__ = "payment_records"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_payment_id = Column(String, nullable=False, index=True)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    customer_id = Column(String, nullable=True)
-    amount = Column(Numeric(20, 2), nullable=False)
-    currency = Column(String, default="USD")
-    paid_at = Column(DateTime(timezone=True), default=now_utc)
-    sequence_number = Column(Integer, default=1)
-    status = Column(String, default="paid")
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-
-
 class Commission(Base):
     __tablename__ = "commissions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'available', 'reserved', 'paid', 'reversed')",
+            name="ck_commissions_status",
+        ),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
@@ -265,7 +263,7 @@ class Commission(Base):
     net_amount = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
     status = Column(String, default="pending")
-    available_on = Column(Date, nullable=True)
+    available_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -276,6 +274,13 @@ class Commission(Base):
 
 class Payout(Base):
     __tablename__ = "payouts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_approval', 'approved', 'rejected', 'paid')",
+            name="ck_payouts_status",
+        ),
+        Index("ix_payouts_affiliate_requested_at", "affiliate_id", "requested_at"),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     affiliate_id = Column(UUID(as_uuid=True), ForeignKey("affiliates.id"), nullable=False)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
@@ -285,8 +290,12 @@ class Payout(Base):
     paypal_fees = Column(Numeric(20, 2), default=Decimal("0.00"))
     net_paid = Column(Numeric(20, 2), default=Decimal("0.00"))
     currency = Column(String, default="USD")
-    paypal_batch_id = Column(String, nullable=True)
-    status = Column(String, default="requested")
+    status = Column(
+        String,
+        nullable=False,
+        default="pending_approval",
+        server_default="pending_approval",
+    )
     requested_at = Column(DateTime(timezone=True), default=now_utc)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     paid_at = Column(DateTime(timezone=True), nullable=True)
@@ -295,17 +304,95 @@ class Payout(Base):
 
     affiliate = relationship("Affiliate", back_populates="payouts", lazy="selectin")
     payout_commissions = relationship("PayoutCommission", back_populates="payout", lazy="selectin")
+    payout_payment = relationship("PayoutPayment", back_populates="payout", uselist=False, lazy="selectin")
+    payout_notification = relationship(
+        "PayoutNotification", back_populates="payout", uselist=False, lazy="selectin"
+    )
+    notification = synonym("payout_notification")
+    transitions = relationship(
+        "PayoutTransition",
+        back_populates="payout",
+        order_by="PayoutTransition.sequence",
+        lazy="selectin",
+    )
+
+
+class PayoutPayment(Base):
+    __tablename__ = "payout_payments"
+    __table_args__ = (UniqueConstraint("payout_id", name="uq_payout_payments_payout_id"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
+    amount = Column(Numeric(20, 2), nullable=False)
+    currency = Column(String, nullable=False, default="USD")
+    payment_method = Column(String, nullable=False)
+    transfer_reference = Column(String, nullable=False)
+    paid_at = Column(DateTime(timezone=True), nullable=False)
+    recorded_by_tenant_user_id = Column(
+        UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=False
+    )
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    payout = relationship("Payout", back_populates="payout_payment")
+    recorded_by = relationship("TenantUser")
+
+
+class PayoutNotification(Base):
+    __tablename__ = "payout_notifications"
+    __table_args__ = (
+        UniqueConstraint("payout_id", name="uq_payout_notifications_payout_id"),
+        CheckConstraint(
+            "status IN ('pending', 'sending', 'sent', 'failed')",
+            name="ck_payout_notifications_status",
+        ),
+    )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
+    status = Column(String, nullable=False, default="pending", server_default="pending")
+    attempt_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    payout = relationship("Payout", back_populates="payout_notification")
 
 
 class PayoutCommission(Base):
     __tablename__ = "payout_commissions"
+    __table_args__ = (
+        Index(
+            "uq_payout_commissions_active_commission",
+            "commission_id",
+            unique=True,
+            postgresql_where=text("is_active IS TRUE"),
+        ),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False)
     commission_id = Column(UUID(as_uuid=True), ForeignKey("commissions.id"), nullable=False)
     amount = Column(Numeric(20, 2), default=Decimal("0.00"))
+    is_active = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     payout = relationship("Payout", back_populates="payout_commissions")
     commission = relationship("Commission", back_populates="payout_commissions")
+
+
+class PayoutTransition(Base):
+    __tablename__ = "payout_transitions"
+    __table_args__ = (UniqueConstraint("payout_id", "sequence"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payout_id = Column(UUID(as_uuid=True), ForeignKey("payouts.id"), nullable=False, index=True)
+    sequence = Column(Integer, nullable=False)
+    from_status = Column(String, nullable=True)
+    to_status = Column(String, nullable=False)
+    actor_tenant_user_id = Column(UUID(as_uuid=True), ForeignKey("tenant_users.id"), nullable=True)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    payout = relationship("Payout", back_populates="transitions")
+    actor = relationship("TenantUser")
 
 
 class PasswordResetCode(Base):

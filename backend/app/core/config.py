@@ -9,9 +9,6 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     sqs_queue_url: str | None = None
-    paypal_client_id: str | None = None
-    paypal_client_secret: str | None = None
-    paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
     # Email (AWS SES)
     email_backend: str = "console"  # "ses" or "console"

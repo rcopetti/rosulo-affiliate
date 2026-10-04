@@ -5,6 +5,14 @@ export interface Tenant {
   allowed_domains?: string[];
 }
 
+// GET /affiliate/merchants keys linked merchants by tenant_id (the value sent
+// as X-Tenant-Id), unlike auth responses that use the Tenant shape's `id`.
+export interface LinkedMerchant {
+  tenant_id: string;
+  name: string;
+  payout_eligibility?: { status: string };
+}
+
 export interface AffiliateAccount {
   id: string;
   email: string;
@@ -107,31 +115,150 @@ export interface Campaign {
 export interface Commission {
   id: string;
   event_id: string;
-  affiliate_id: string;
   campaign_id?: string;
   gross_amount: number;
   withholding_amount: number;
   net_amount: number;
   currency: string;
-  status: 'pending' | 'available' | 'paid' | 'reversed';
-  available_on?: string;
+  status: 'pending' | 'available' | 'reserved' | 'paid' | 'reversed';
+  available_at?: string | null;
+  created_at: string;
+}
+
+export interface PayoutPaymentConfirmation {
+  /** ISO-8601 timestamp with an explicit offset; the browser-local
+   * datetime-local value must be converted before submitting. */
+  paid_at: string;
+  transfer_reference: string;
+}
+
+export interface PayoutPayment {
+  id: string;
+  payout_id: string;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  transfer_reference: string;
+  paid_at: string;
+  recorded_by_tenant_user_id: string;
+}
+
+export interface PayoutTransition {
+  id: string;
+  sequence: number;
+  from_status: string | null;
+  to_status: string;
+  actor_tenant_user_id: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export type PayoutStatus = 'pending_approval' | 'approved' | 'rejected' | 'paid';
+
+export interface PayoutPayee {
+  name: string;
+  email: string;
+  paypal_email?: string | null;
+}
+
+export interface PayoutCommissionDetail {
+  commission_id: string;
+  event_id: string;
+  occurred_at?: string | null;
+  good_date?: string | null;
+  payment_sequence?: number | null;
+  sale_amount?: number | null;
+  sale_payment_record_id?: string | null;
+  rate_percent?: number | null;
+  gross_amount: number;
+  withholding_amount: number;
+  net_amount: number;
+  currency: string;
+  campaign_id?: string | null;
+}
+
+export type PayoutNotificationStatus = 'pending' | 'sending' | 'sent' | 'failed';
+
+/** Delivery state of the payout-paid email, exposed on the payout detail so
+ * merchants can spot and retry a failed send. */
+export interface PayoutNotification {
+  status: PayoutNotificationStatus;
+  attempt_count: number;
+  last_attempt_at?: string | null;
+  sent_at?: string | null;
 }
 
 export interface Payout {
   id: string;
   affiliate_id: string;
+  tenant_id?: string;
   requested_amount: number;
   approved_amount: number;
   withholding_total: number;
   paypal_fees: number;
   net_paid: number;
   currency: string;
-  status: 'requested' | 'pending_approval' | 'approved' | 'processing' | 'paid' | 'failed' | 'rejected';
+  status: PayoutStatus;
   requested_at: string;
-  approved_at?: string;
-  paid_at?: string;
-  paypal_batch_id?: string;
-  commissions?: Commission[];
+  approved_at?: string | null;
+  paid_at?: string | null;
+  affiliate?: PayoutPayee;
+  payout_commissions?: PayoutCommissionDetail[];
+  commission_count?: number;
+  earliest_sale_at?: string | null;
+  latest_sale_at?: string | null;
+  total_sale_amount?: number | null;
+  payout_payment?: PayoutPayment | null;
+  payout_notification?: PayoutNotification | null;
+  transitions?: PayoutTransition[];
+}
+
+// Sparse queue-row shape served by the admin dashboard; the full `Payout`
+// also satisfies it so list endpoints can feed the same component.
+export interface PayoutQueueItem {
+  id: string;
+  affiliate_id?: string;
+  requested_amount: number;
+  currency: string;
+  status: PayoutStatus;
+  requested_at: string | null;
+  affiliate?: Pick<PayoutPayee, 'name'> | null;
+}
+
+export interface PayoutRequestPayload {
+  currency: string;
+  commission_ids?: string[];
+}
+
+// Row of an affiliate's payout history served by
+// GET /admin/affiliates/{id}/payouts.
+export interface AffiliatePayoutHistoryItem {
+  id: string;
+  status: PayoutStatus;
+  currency: string;
+  requested_amount: number;
+  approved_amount: number;
+  withholding_total: number;
+  net_paid: number;
+  requested_at: string;
+  approved_at?: string | null;
+  paid_at?: string | null;
+  payment_reference?: string | null;
+}
+
+// Paid payout totals for a single currency; never summed across currencies.
+export interface AffiliatePaidCurrencyTotals {
+  currency: string;
+  rolling_12_months: number;
+  year_to_date: number;
+}
+
+export interface AffiliatePayoutHistory {
+  items: AffiliatePayoutHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  paid_totals_by_currency: AffiliatePaidCurrencyTotals[];
 }
 
 export interface CurrencyBalance {
@@ -140,6 +267,7 @@ export interface CurrencyBalance {
   pending: number;
   available: number;
   paid: number;
+  reserved: number;
   tax_retained: number;
   reversal_total: number;
 }
@@ -150,6 +278,7 @@ export interface Balance {
   pending: number | null;
   available: number | null;
   paid: number | null;
+  reserved: number | null;
   reversed: number | null;
   tax_retained: number | null;
   reversal_total: number | null;
@@ -184,6 +313,7 @@ export interface PaginatedEvents {
 
 export interface Dashboard {
   lead_volume: { bucket: string; count: number }[];
+  sales_volume: { bucket: string; amount: number; currency: string }[];
   sales_by_sequence: { sequence: number; count: number; amount: number; currency: string }[];
   balance: Balance;
 }
@@ -200,5 +330,5 @@ export interface AdminDashboard {
   campaign_performance: { campaign_id: string; name: string; clicks: number; leads: number; sales: number }[];
   affiliates: Affiliate[];
   commission_liability: { period: string; gross: number; tax_retained: number; currency: string }[];
-  payout_queue: Payout[];
+  payout_queue: PayoutQueueItem[];
 }

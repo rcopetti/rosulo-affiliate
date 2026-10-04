@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { fetchMerchants, selectMerchant } from '@/api/auth';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { affiliateReturnTenantId, fetchMerchants, safeAffiliateReturnTo, selectMerchant } from '@/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 
 export function MerchantSelectPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setTenant = useAuthStore((s) => s.setTenant);
   const toast = useToast();
 
@@ -19,7 +20,19 @@ export function MerchantSelectPage() {
     try {
       await selectMerchant(tenantId);
       setTenant(tenantId);
-      navigate('/affiliate/dashboard');
+      // Continue to a preserved payout deep link only when it targets the
+      // merchant the affiliate just selected; anything else falls back to
+      // the dashboard.
+      const merchantIds = (merchants ?? []).map((merchant) => merchant.tenant_id);
+      const returnTo = safeAffiliateReturnTo(
+        searchParams.get('returnTo'),
+        merchantIds
+      );
+      if (returnTo && affiliateReturnTenantId(returnTo) === tenantId) {
+        navigate(returnTo);
+      } else {
+        navigate('/affiliate/dashboard');
+      }
     } catch {
       toast.add({ title: 'Selection failed', description: 'Could not select merchant', variant: 'error' });
     }
@@ -37,8 +50,8 @@ export function MerchantSelectPage() {
           {merchants?.length ? (
             merchants.map((m) => (
               <button
-                key={m.id}
-                onClick={() => handleSelect(m.id)}
+                key={m.tenant_id}
+                onClick={() => handleSelect(m.tenant_id)}
                 className="w-full cursor-pointer rounded-lg border border-line bg-surface p-4 text-left transition hover:border-primary hover:shadow-sm"
               >
                 <p className="font-semibold text-slate-900">{m.name}</p>

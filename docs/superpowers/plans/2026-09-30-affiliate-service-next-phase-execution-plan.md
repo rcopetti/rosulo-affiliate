@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing FastAPI/SQLAlchemy modular monolith and React SPA. First harden the event and commission ledger, tenant boundaries, KYC state, and payout lifecycle; then improve tracking/integration and daily program operations; consider marketplace and broader attribution work only after validating demand. Split each phase into a self-contained implementation plan before coding because the phases touch distinct product and data domains.
 
-**Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, PostgreSQL, SQS, PayPal integration, React, TypeScript, Vite, TanStack Query, Vitest, pytest, httpx.
+**Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, PostgreSQL, existing SQS infrastructure (not used for manual payout execution), manual PayPal settlement, React, TypeScript, Vite, TanStack Query, Vitest, pytest, httpx.
 
 ---
 
@@ -26,37 +26,40 @@ The P0 items are launch gates, not a claim that every item is already a known pr
 
 ## 2. Current Capability Baseline
 
-The repository currently implements merchant invitations, per-affiliate commission contracts, affiliate-created campaigns, click/lead/sale event ingestion, a commission ledger, affiliate payout requests, merchant approval/rejection, PayPal dispatch through a worker, and basic merchant and affiliate dashboards. The product is therefore a useful foundation for a narrow, invite-led affiliate program.
+The repository currently implements merchant invitations, per-affiliate commission contracts, affiliate-created campaigns, click/lead/sale event ingestion, a commission ledger, affiliate payout requests, merchant approval/rejection, manual merchant-confirmed settlement foundation from W0.2, and basic dashboards. It does not yet implement the new product requirement for selected commission batches, scheduled due-date maturity, itemized merchant review, PayPal recipient instructions, payout-specific payment storage, or paid-payout notices/reporting.
 
 Relevant implementation entry points include:
 
 - Merchant invitation, affiliate records, and KYC approval: `backend/app/api/v1/admin/affiliates.py`, `backend/app/services/affiliate.py`, `backend/app/services/affiliate_invite.py`.
 - Contract rules: `backend/app/api/v1/admin/contracts.py`, `backend/app/services/contract.py`, `backend/app/services/commission.py`.
 - Campaign and event ingestion: `backend/app/api/v1/affiliate/campaigns.py`, `backend/app/services/campaign.py`, `backend/app/api/v1/public/events.py`, `backend/app/services/event.py`.
-- Payout lifecycle: `backend/app/api/v1/affiliate/payouts.py`, `backend/app/api/v1/admin/payouts.py`, `backend/app/services/payout.py`, `backend/app/queue/handlers.py`, `backend/app/integrations/paypal.py`.
+- Payout lifecycle: `backend/app/api/v1/affiliate/payouts.py`, `backend/app/api/v1/admin/payouts.py`, `backend/app/services/payout.py`, `backend/app/db/models.py`.
+- Email delivery: `backend/app/services/email.py` and templates; payout notice workflow is not implemented.
 - Reporting and portals: `backend/app/services/dashboard.py`, `frontend/src/pages/admin/`, `frontend/src/pages/affiliate/`.
 
 ### Review findings that drive this plan
 
-1. Event idempotency lookup uses a globally unique `event_id` without scoping the lookup to the authenticated tenant. The response can therefore return another tenant's existing event when IDs collide.
-2. Payout dispatch does not yet form a reliable provider-confirmed state machine: the PayPal webhook is a stub, the payout batch ID is hard-coded, a successful API response is treated as paid, and exceptions release commissions even when provider outcome may be ambiguous.
-3. Merchant-side KYC approval and the affiliate UI use separate approval signals. The merchant approval path changes the affiliate-level flag; the affiliate payout page checks each uploaded document's `approved` flag.
+1. Event idempotency lookup was globally unique and unscoped; W0.1 now scopes the event ID uniqueness and lookup by tenant.
+2. W0.2 disables automatic PayPal dispatch and records merchant-confirmed manual settlements. The remaining product gap is the selected-commission batch lifecycle and itemized merchant verification; the active implementation still accepts only a currency and reserves all eligible commissions.
+3. Merchant-side KYC approval and the affiliate UI previously used separate approval signals; W0.3 now unifies per-merchant document review and payout eligibility.
 4. The integration UI advertises a browser click endpoint at `/api/v1/tracking/track-click`, but that route is not registered in the backend. Merchants are instructed to build their own proxy.
 5. The authenticated affiliate join route can create a tenant association directly without the invitation path or a contract.
 6. The affiliate dashboard accepts a campaign selection in the UI but the API route does not pass the filter through. The dashboard's `earned` total is initialized but not calculated from the implemented commission statuses.
-7. Payment/event schemas support currency labels, but some balance and payout paths assume USD. Amounts use floating-point database columns. Currency scope and money representation need to be decided before expanding payment support.
-8. The service definition describes refund/chargeback reversals, but the accepted event types and payment webhook do not implement an end-to-end reversal workflow.
+7. Payment/event schemas support currency labels, but currency-scope gaps existed; W0.5 defines Decimal/Numeric storage and currency-scoped balances. Verify current branch implementation before relying on this baseline.
+8. Sale events include an external `payment_record_id`; the current incoming-payment webhook/storage and future refund-to-sale reversal workflow must be reconciled with the approved product design.
 
 ## 3. Before Starting Any P0 Implementation
 
-Resolve these product and finance decisions with the service owner before changing payout or tax behavior:
+The following payout product decisions were confirmed by the service owner on 2026-10-01 and are authoritative for follow-up implementation planning:
 
-- **Payout funding model:** Does each merchant fund its own affiliate payouts, or does Rosulo pay from a platform-controlled account and settle with merchants separately? The current PayPal integration uses application-level credentials. Do not design merchant onboarding, credential storage, or liability accounting until this ownership model is explicit.
-- **Currency policy:** Is the next release USD-only, or must merchants and affiliates transact in multiple currencies? Until multi-currency balances and payouts are designed, either explicitly reject unsupported currencies or implement per-currency accounting; do not sum mixed currencies into one balance.
-- **Tax/compliance scope:** Confirm supported jurisdictions and withholding behavior with qualified tax counsel/accounting support. The existing fixed withholding calculation is not a jurisdiction-aware tax rules engine and this plan does not treat it as tax advice.
-- **Attribution policy:** Decide the initial click lookback window, precedence between click/lead/coupon/manual attribution, and behavior for repeat conversions before productizing a browser SDK.
+- **Payout funding model:** Manual merchant-funded settlement. Merchants transfer funds outside Rosulo; Rosulo records the actual payment datetime, PayPal reference, and confirming tenant user. Rosulo does not dispatch PayPal/SQS payouts or assume platform payout liability.
+- **Sale event contract:** The merchant sends a sale only after payment confirmation and supplies both `good_date` and external `payment_record_id`. `good_date` is required, is the due date itself, and is interpreted as 00:00 UTC. Rosulo adds no additional 14-day hold and promotes due commissions in a daily UTC process; future refunds use the same external ID.
+- **Payout selection:** Affiliate requests all available commissions of one currency or selected whole commission IDs; no arbitrary amount. Rejected commissions may be requested again, while the prior payout association remains in audit history.
+- **Manual payment:** PayPal only for v1. The merchant sees affiliate identity, contact email, PayPal recipient identifier, payout amount/currency, and commission count, then records `paid_at` and the PayPal transaction/reference.
+- **Payment data model:** Use `PayoutPayment` for outgoing affiliate settlement. Retire incoming payment-record ingestion/storage; retain `Event.payment_record_id` as the merchant's external sale/refund correlation identifier. Migrate payout-linked legacy rows and never silently discard any historical incoming rows.
+- **Paid notice and reporting:** Email the affiliate a link to authenticated payout detail after payment commit. Merchant affiliate summaries show paid payout totals by payment date for rolling 12 months and calendar YTD, separately per currency.
 
-Record the decisions in the phase-specific implementation plan and API contract before implementation begins.
+Other open finance decisions remain: currency support stays currency-scoped with no FX conversion; tax and withholding behavior must receive qualified tax/accounting review; commission base and fee allocation must be resolved before changing those policies; click attribution rules remain under Workstream 1.1. The detailed payout design is `docs/superpowers/specs/2026-10-01-commission-backed-manual-payouts-design.md`.
 
 ## 4. P0 — Trust, Tenant Isolation, and Financial Correctness
 
@@ -88,34 +91,39 @@ Record the decisions in the phase-specific implementation plan and API contract 
 
 ### Workstream 0.2: Make payout execution idempotent and reconcilable
 
-**Outcome:** A payout is not marked paid until the provider confirms completion; queue redelivery and ambiguous network failures cannot silently cause a second transfer or release the same commissions for a duplicate request.
+**Status:** Complete (2026-10-01; manual merchant-funded settlement selected; migration upgrade/downgrade and legacy-row preservation verified on a disposable PostgreSQL database).
+
+**Outcome:** A payout is not marked paid until a merchant user records the completed external transfer. Duplicate requests and stale queue messages cannot create another transfer, and commissions stay reserved until the merchant confirms payment or rejects the payout.
 
 **Likely files:**
-- Modify: `backend/app/db/models.py`, `backend/app/services/payout.py`
+- Modify: `backend/app/db/models.py`, `backend/app/services/payout.py`, `backend/app/services/commission.py`, `backend/app/services/balance.py`
 - Modify: `backend/app/api/v1/admin/payouts.py`, `backend/app/api/v1/public/webhooks.py`
-- Modify: `backend/app/queue/client.py`, `backend/app/queue/handlers.py`, `backend/app/queue/worker.py`
-- Modify: `backend/app/integrations/paypal.py`, `backend/app/core/config.py`
-- Create: next Alembic revision under `backend/alembic/versions/`
-- Test: `backend/tests/test_payout.py`; add provider/webhook tests in focused payout test modules as appropriate
+- Modify: `backend/app/queue/handlers.py`
+- Modify: `backend/app/schemas/payout.py`
+- Modify: `frontend/src/api/admin/payouts.ts`, `frontend/src/api/types.ts`, `frontend/src/components/admin/PayoutQueue.tsx`, `frontend/src/components/admin/PayoutDetail.tsx`, `frontend/src/components/affiliate/PayoutsTable.tsx`, `frontend/src/pages/admin/PayoutsPage.tsx`, `frontend/src/pages/admin/DashboardPage.tsx`
+- Create: `backend/alembic/versions/b1c2d3e4f5a6_manual_payout_settlement.py`
+- Test: `backend/tests/test_payout.py`, `backend/tests/test_document_review_migration.py`, `frontend/src/tests/components/PayoutQueue.test.tsx`, `frontend/src/tests/components/PayoutsTable.test.tsx`
 
 **Implementation sequence:**
 
-- [ ] Write failing tests for duplicate approval, repeated worker delivery, provider rejection, timeout after provider acceptance, webhook success, webhook failure, and payout rejection. Assert each commission can belong to at most one active payout and is not released when the provider result is unknown.
-- [ ] Define permitted payout status transitions and validate them server-side. The worker must accept only a payout in an eligible state and must be safe when the same queue message is delivered more than once.
-- [ ] Replace the constant PayPal `sender_batch_id` with a deterministic payout-specific idempotency key. Persist provider batch/item identifiers and provider status before finalizing the ledger.
-- [ ] Verify PayPal webhook authenticity and correlate webhook events to the stored payout. Only provider-confirmed completion may mark a payout and its associated commissions paid.
-- [ ] Keep ambiguous provider outcomes in a reconcilable state; query/reconcile provider status before retrying or making commissions available again.
-- [ ] Make payout creation and commission reservation atomic. Use a row-lock or conditional state update to prevent two concurrent requests from reserving the same available commissions.
-- [ ] Make queue publication durable relative to the payout approval transaction. Prefer a persisted outbox or document and test an equivalent mechanism that prevents approved payouts from being stranded if queue publication fails.
-- [ ] Implement merchant-specific funding/credentials only after the funding-model decision in Section 3. If the decision is platform-funded, add explicit merchant liability and settlement accounting instead of implying merchant-owned PayPal payouts.
+- [x] Write failing tests for concurrent duplicate payout requests, duplicate approval/rejection, stale worker redelivery, explicit payment confirmation, duplicate/conflicting confirmation, rejection release, and commissions before/after the 14-day availability hold. Assert that an unconfirmed approved payout remains unpaid and its commissions remain reserved.
+- [x] Define and enforce the permitted transitions: `pending_approval -> approved | rejected`; `approved -> paid` only through merchant payment confirmation. Record each transition's sequence, actor, and time.
+- [x] Add a payout-linked payment record with payment method, transfer reference, amount, currency, and confirming tenant user. Preserve legacy incoming payment records and migrate existing payouts with an actor-less baseline history entry.
+- [x] Disable PayPal payout webhook handling and automatic PayPal dispatch. The PayPal webhook returns `410`; the worker safely no-ops old payout messages, and approval no longer publishes payout messages to SQS.
+- [x] Keep commissions reserved after approval. A merchant's explicit confirmation creates one payment record and marks the payout and commissions paid atomically; an identical retry is idempotent and conflicting payment details are rejected. Show the recorded method/reference in the affiliate payout history.
+- [x] Make payout creation and commission reservation atomic with commission row locks; prove concurrent requests reserve the available commission set only once.
+- [x] Remove queue publication from the manual payout approval transaction; no outbox is needed when approval does not enqueue a transfer.
+- [x] Record the confirmed manual merchant-funded model in Section 3. No platform-held payout funds, merchant payout credentials, or automated provider settlement are introduced.
 
 **Acceptance criteria:**
 
-- A provider timeout cannot cause automatic commission release until the provider outcome is known.
-- Duplicate messages and repeated approval requests do not create duplicate transfers.
-- Every payout has an auditable transition history and provider correlation data.
-- Failed/rejected payments return commissions to an eligible balance exactly once; completed payouts do not.
-- The stored payout amount, currency, withholding, provider-reported result, and affiliate-visible state reconcile.
+- An approved payout and its commissions remain reserved until a merchant user records the external payment; no automatic provider failure path releases commissions.
+- Duplicate queue delivery, payout requests, approvals, rejections, and identical payment confirmations cannot duplicate settlement or ledger changes.
+- Every payout has ordered, auditable transition history; a completed payout has one tenant-scoped payment record with amount, currency, payment method, transfer reference, and confirming user.
+- Rejected payouts return their commissions to an eligible balance exactly once; completed payouts do not.
+- Stored payout amount, currency, withholding, net amount, manual payment record, and affiliate-visible paid state reconcile.
+
+**Product follow-up note (2026-10-01):** W0.2 is complete as the manual settlement/idempotency foundation. It did not deliver selected commission batches, daily `good_date` maturity, merchant itemized commission review, PayPal recipient instructions, payout-specific `PayoutPayment`, paid payout reporting, or affiliate payment email. Its current overloaded `PaymentRecord` implementation is transitional; Workstream 0.6 supersedes the model responsibility without changing W0.2's historical completion record.
 
 ### Workstream 0.3: Unify KYC/document review and payout eligibility
 
@@ -196,6 +204,36 @@ Record the decisions in the phase-specific implementation plan and API contract 
 - Rounding rules are deterministic and covered by tests.
 - Affiliate and merchant balance views reconcile to the same ledger.
 - Status totals, reversal totals, and lifetime earned have documented, non-overlapping meanings.
+
+### Workstream 0.6: Complete the commission-backed manual payout product
+
+**Status:** Implemented (2026-10-02) across `feature/commission-availability-and-request` and `feature/merchant-manual-payout-operations`. Backend 176 tests, frontend 42 tests, and production build pass; Alembic head `a1b2c3d4e5f6`. Release gate pending: deploy/verify the non-production Fargate schedule and apply the expand/contract migration order.
+
+**Outcome:** Affiliates request payment for all or selected available whole commission rows; merchants inspect the complete batch, approve/reject it, manually pay through PayPal, record actual payment details, and affiliates receive a payout-detail email. Daily maturity follows the merchant-provided due date.
+
+**Authoritative product/workflow documents:**
+- Product design: `docs/superpowers/specs/2026-10-01-commission-backed-manual-payouts-design.md`
+- Workflow registry: `docs/workflows/REGISTRY.md`
+- Workflow specs: `docs/workflows/WORKFLOW-commission-maturity.md`, `docs/workflows/WORKFLOW-affiliate-payout-request.md`, `docs/workflows/WORKFLOW-merchant-payout-settlement.md`
+
+**Delivery split:** Execute these two dependent implementation plans in order after confirming the prerequisite W0.2 code is committed and the deployment target is configured:
+
+1. `docs/superpowers/plans/2026-10-01-commission-availability-and-request-implementation-plan.md` — require `good_date` on sale events; set `available_at` to 00:00 UTC on that date; add a daily idempotent catch-up process; support all/selected whole commission IDs; separate `pending`, `available`, and `reserved`; atomically reserve only valid same-currency commissions; retain rejected payout links while releasing their commissions.
+2. `docs/superpowers/plans/2026-10-01-merchant-manual-payout-operations-implementation-plan.md` — itemized merchant review, affiliate payout detail/history, manual PayPal instructions and confirmation, `PayoutPayment`, paid payout summaries (rolling 12 months and YTD by payment date/currency), affiliate email delivery/retries, incoming-payment ingestion retirement, and safe legacy-data migration.
+
+**Dependencies and implementation gates:** W0.2 settlement foundation, W0.3 payout eligibility, and W0.5 amount/currency invariants. The scheduler decision is resolved: EventBridge Scheduler launches an ECS/Fargate maintenance task daily at 00:15 UTC using the existing one-shot Fargate deployment pattern; verify it in a non-production environment. Payment notices use a transactional `PayoutNotification`, after-commit send, visible status/retry action, and daily recovery of pending/expired-send rows. Migration copies payout-linked rows and aborts before dropping `payment_records` if any historical incoming rows need an owner-approved retention/archive decision; no silent data deletion. Refund ingestion remains a separate workflow, with the sale event's external `payment_record_id` retained for future correlation.
+
+**Acceptance criteria:**
+
+- Every sale event requires merchant-supplied `good_date` and external `payment_record_id`; no extra 14-day hold is applied.
+- Due commissions become `available` through the daily process, even if the job missed prior runs; repeated/concurrent runs do not duplicate transitions.
+- A payout contains all or selected whole commissions in one currency, derives its totals from those rows, and cannot concurrently reserve one commission twice.
+- Merchant review exposes every linked commission, source sale date range, count, gross, withholding, and net before approval/rejection.
+- Rejection releases commissions once and retains historical association; approval retains reservation.
+- A payout reaches `paid` only with one `PayoutPayment` containing actual merchant-entered payment time/reference; no PayPal API dispatch occurs.
+- Merchant paid payout history and rolling 12-month/YTD summaries reconcile to payment records per currency.
+- The affiliate receives a retryable transactional email linking to authenticated payout details; delivery failure cannot reverse payment.
+- Incoming-payment webhook/storage is retired safely; the sale event's external `payment_record_id` remains available for future refund correlation.
 
 ## 5. P1 — Make Tracking and Reporting Dependable
 
@@ -320,8 +358,8 @@ Establish a baseline before setting numeric targets. Assign one product owner an
 | Measure | Definition | Phase gate |
 |---|---|---|
 | Tenant-safe event idempotency | Duplicate requests within one tenant do not duplicate events/commissions; cross-tenant IDs never expose another tenant's row | P0 tenant-isolation tests pass |
-| Payout reconciliation | Every payout reaches a provider-confirmed terminal state or a visible, actionable reconciliation state | P0 payout tests and sandbox reconciliation pass |
-| Ledger accuracy | Dashboard, affiliate balance, payout request, and provider result reconcile by currency | P0 ledger examples reconcile exactly under documented rounding |
+| Payout reconciliation | Every payout reaches an auditable merchant-confirmed terminal state with exactly one matching `PayoutPayment` or remains visibly actionable | P0 manual-settlement workflow tests and migration checks pass |
+| Ledger accuracy | Dashboard, affiliate balance, selected payout commissions, and `PayoutPayment` reconcile by currency | P0 ledger examples reconcile exactly under documented rounding |
 | Tracking coverage | Share of merchant-confirmed paid conversions with valid click/lead/campaign attribution | P1 integration telemetry is available and validated |
 | Partner activation | Invited affiliates who complete profile/required documents, create a campaign, and generate a first valid conversion | P1 funnel events and baseline are collected |
 | Program efficiency | Time from payout request to confirmed payment; merchant review time; integration setup completion time | Baselines and ownership are agreed before target-setting |

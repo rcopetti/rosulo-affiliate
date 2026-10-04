@@ -21,6 +21,7 @@ export function TenantSelector() {
       options={tenants.map((t) => ({ value: t.id, label: t.name }))}
       placeholder="Select merchant"
       className="w-56"
+      inline
     />
   );
 }

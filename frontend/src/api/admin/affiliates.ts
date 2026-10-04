@@ -1,5 +1,5 @@
 import { adminApi } from './client';
-import { Affiliate, AffiliateDocumentStatus } from '../types';
+import { Affiliate, AffiliateDocumentStatus, AffiliatePayoutHistory } from '../types';
 
 export interface CreateInviteRequest {
   email: string;
@@ -18,13 +18,34 @@ export interface InviteOut {
   created_at: string;
 }
 
+export interface AffiliateInviteListItem {
+  id: string;
+  email: string;
+  status: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
 export async function getAffiliates(): Promise<Affiliate[]> {
   const res = await adminApi.get<Affiliate[]>('/admin/affiliates');
   return res.data;
 }
 
+export async function getAffiliateInvites(): Promise<AffiliateInviteListItem[]> {
+  const res = await adminApi.get<AffiliateInviteListItem[]>('/admin/affiliates/invites');
+  return res.data;
+}
+
 export async function getAffiliate(id: string): Promise<Affiliate> {
   const res = await adminApi.get<Affiliate>(`/admin/affiliates/${id}`);
+  return res.data;
+}
+
+export async function getAffiliatePayouts(
+  id: string,
+  params: { limit?: number; offset?: number } = {},
+): Promise<AffiliatePayoutHistory> {
+  const res = await adminApi.get<AffiliatePayoutHistory>(`/admin/affiliates/${id}/payouts`, { params });
   return res.data;
 }
 

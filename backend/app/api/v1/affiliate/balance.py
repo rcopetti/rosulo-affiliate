@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_current_affiliate
 from app.db.dependencies import get_db
-from app.db.models import Affiliate, Commission
+from app.db.models import Affiliate
+from app.schemas.commission import CommissionOut
 from app.schemas.dashboard import BalanceOut
-from app.services.balance import add_legacy_balance_fields, get_balances
+from app.services.balance import (
+    add_legacy_balance_fields,
+    get_balances,
+    list_commissions_with_logical_status,
+)
 
 router = APIRouter()
 
@@ -20,12 +24,15 @@ async def get_balance(
     return add_legacy_balance_fields(balances)
 
 
-@router.get("/commissions")
+@router.get("/commissions", response_model=list[CommissionOut])
 async def list_commissions(
     affiliate: Affiliate = Depends(get_current_affiliate),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Commission).where(Commission.affiliate_id == affiliate.id)
-    )
-    return result.scalars().all()
+    rows = await list_commissions_with_logical_status(db, affiliate.id)
+    return [
+        CommissionOut.model_validate(commission).model_copy(
+            update={"status": logical_status}
+        )
+        for commission, logical_status in rows
+    ]
